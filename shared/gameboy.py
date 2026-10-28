@@ -221,6 +221,9 @@ class Game:
         self.sav_tail = b''         # bytes after cart RAM in the .sav, kept
         self.backed_up = False
         self.save_pending = False   # a .sav write failed: try again later
+        self.frames_seen = 0
+        self.speed = None           # see speed_report()
+        self.load_info = ''
 
     def load(self):
         # Copy ROM file into emulator memory (PSRAM on Q), then .sav.
@@ -228,6 +231,11 @@ class Game:
         with CardSlot(readonly=True) as card:
             size = uos.stat(self.fn)[6]
             self.rom_size = size
+
+            # the ROM goes in PSRAM: anything staged there is gone (see auth.py)
+            import glob
+            if getattr(glob, 'PSRAM', None):
+                glob.PSRAM.psram_write_count += 1
             emu.rom_begin(size)
 
             buf = bytearray(CHUNK)
@@ -285,7 +293,7 @@ class Game:
             self.check_card()
 
             tmp = self.sav + '.tmp'
-            with open(tmp, 'wb') as fd:
+            with card.open(tmp, 'wb') as fd:
                 fd.write(emu.cart_ram())
                 if self.sav_tail:
                     fd.write(self.sav_tail)
@@ -328,7 +336,7 @@ class Game:
             self.check_card()
 
             tmp = self.state + '.tmp'
-            with open(tmp, 'wb') as fd:
+            with card.open(tmp, 'wb') as fd:
                 fd.write(emu.state_header())
                 fd.write(emu.state_view())
                 if self.ram_size:
@@ -530,6 +538,7 @@ async def pause_menu(game, cfg):
             ('Screen: ' + VIDEO_MODES[cfg.video][0], 'video'),
             ('Palette: ' + PALETTES[cfg.palette][0], 'palette'),
             ('Controls', 'controls'),
+            ('Speed', 'speed'),
             ('Quit Game', 'quit'),
         ]
         idx = await menu_pick([l for l, _ in items], cursor=cursor)
@@ -566,6 +575,11 @@ async def pause_menu(game, cfg):
         elif what == 'controls':
             await controls_menu(cfg, emu)
 
+        elif what == 'speed':
+            await ux_show_story((game.speed or 'Play a bit first.') + '\n\n' + game.load_info,
+                                title='Speed')
+            continue
+
         cfg.save()
         cfg.apply(emu)
 
@@ -586,24 +600,30 @@ async def quit_ok(game):
                 break
     return True
 
-def log_stats(emu, last):
-    # Frame rate and time split since the last call, to the console. Returns
-    # the frame counter for next time.
-    frames, shown, skipped, groups, hits, misses, emu_us, lcd_us, idle_us = emu.stats(True)
-    n = frames - last
+def speed_report(game):
+    # Frame rates and time split since the last call (the pause menu's
+    # Speed screen shows the latest); also printed to the console.
+    frames, shown, skipped, groups, hits, misses, emu_us, lcd_us, idle_us = \
+        game.emu.stats(True)
+    n = frames - game.frames_seen
+    game.frames_seen = frames
     total = emu_us + lcd_us + idle_us
-    if n and total:
-        print('gameboy: %d frames, %.2f fps, %d shown, %d skipped; '
-              'emu %d%% lcd %d%% idle %d%%; bank cache %d/%d' % (
-              n, n * 1e6 / total, shown, skipped,
-              emu_us * 100 // total, lcd_us * 100 // total, idle_us * 100 // total,
-              hits, hits + misses))
-    return frames
+    if not (n and total):
+        return
+
+    pct = lambda t: t * 100 // total
+    lookups = hits + misses
+    game.speed = ('Game: %.1f fps\nScreen: %.1f fps (%d of %d frames)\n\n'
+                  'Emulation %d%%, LCD %d%%, idle %d%%\n'
+                  'Bank cache hits: %d%% of %d' % (
+                  n * 1e6 / total, shown * 1e6 / total, shown, n,
+                  pct(emu_us), pct(lcd_us), pct(idle_us),
+                  (hits * 100 // lookups) if lookups else 100, lookups))
+    print('gameboy: ' + game.speed.replace('\n\n', '; ').replace('\n', '; '))
 
 async def play(game, cfg):
     emu = game.emu
     redraw = True
-    last = 0
     while True:
         before_run()
         rv = emu.run(redraw=redraw)
@@ -616,7 +636,7 @@ async def play(game, cfg):
                 redraw = True
             continue
 
-        last = log_stats(emu, last)
+        speed_report(game)
         screen_back()
 
         if rv == core.RUN_ERROR:
@@ -648,7 +668,12 @@ async def start_gameboy(*a):
         dis.fullscreen('Loading...')
         game = Game(emu, fn)
         try:
-            game.load()
+            t0 = utime.ticks_ms()
+            title = game.load()
+            gc.collect()
+            game.load_info = 'ROM: %s, %dK, loaded in %d ms\nFree memory: %dK' % (
+                title, game.rom_size // 1024, utime.ticks_diff(utime.ticks_ms(), t0),
+                gc.mem_free() // 1024)
         except Exception as exc:
             await ux_show_story('Unable to start %s\n\n%s' % (fn.split('/')[-1], err_text(exc)),
                                 title='Game Boy')

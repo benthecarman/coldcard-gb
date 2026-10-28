@@ -12,4 +12,11 @@ CFLAGS_USERMOD += -DGB_HAL_UNIX
 
 endif
 
-# Q1 hardware build: added with hal_q1.c
+ifeq ($(BOARD),COLDCARD_Q1)
+
+# COLDCARD Q only; the Mk4 shares this c-modules directory but has no LCD
+# or keyboard for it
+SRC_USERMOD += $(GB_DIR)/modgameboy.c $(GB_DIR)/gb_core.c $(GB_DIR)/gb_video.c
+SRC_USERMOD += $(GB_DIR)/hal_q1.c
+
+endif

@@ -4,6 +4,7 @@ freeze_as_mpy('', [
 	'bbqr.py',
 	'calc.py',
 	'decoders.py',
+	'gameboy.py',
 	'gpu.py',
 	'keyboard.py',
 	'lcd_display.py',
