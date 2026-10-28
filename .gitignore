@@ -26,3 +26,11 @@ __pycache__/
 pp
 
 .idea/
+
+# Game Boy ROMs, saves and states: never commit (see gameboy/README.md)
+*.gb
+*.gbc
+*.sav
+*.sav.*
+*.state
+*.state.tmp
