@@ -275,6 +275,14 @@ class LCDSimulator(SimulatedScreen):
             mode = mode.decode('ascii')
             here = readable.read(count)
 
+            # non-blocking pipe: big updates (Game Boy rows) can arrive in pieces
+            here = here or b''
+            while len(here) < count:
+                select([readable], [], [], 1)
+                more = readable.read(count - len(here))
+                if more == b'': break
+                here += more or b''
+
             if mode == 's':
                 # trigger a snapshot, data is filename to save PNG into
                 self.snapshot(here.decode())
@@ -359,13 +367,12 @@ class LCDSimulator(SimulatedScreen):
 
             elif mode == 'r':
                 # raw RGB565 pixels (not compressed, packed)
-                # slow, avoid
+                # - mv is a numpy view, indexed [x][y]; the Game Boy
+                #   emulator streams video this way
+                import numpy
                 assert count == w * h * 2, [count, w, h]
-                for y in range(Y, Y+h):
-                    for x in range(X, X+w):
-                        val, = struct.unpack('<H', here[pos:pos+2])
-                        self.mv[x][y] = val
-                        pos += 2
+                px = numpy.frombuffer(here, dtype='<u2').reshape(h, w)
+                self.mv[X:X+w, Y:Y+h] = px.T
 
             elif mode == 'f':
                 # fill a region to single pixel value
