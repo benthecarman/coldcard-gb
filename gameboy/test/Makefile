@@ -2,7 +2,7 @@
 #
 #   make            build build/gbtest
 #   make test       fetch test ROMs, run cpu_instrs, instr_timing, a save
-#                   state round trip, dmg-acid2
+#                   state round trip, dmg-acid2, key ghost checks
 #
 CORE    = ../../external/c-modules/gameboy
 ROMS    = ../roms
@@ -28,6 +28,7 @@ test: $(BUILD)/gbtest roms
 	$(BUILD)/gbtest -s 1 serial $(ROMS)/cpu_instrs.gb 10000
 	$(BUILD)/gbtest serial $(ROMS)/instr_timing.gb 1000
 	$(BUILD)/gbtest state $(ROMS)/tobu.gb 900
+	python3 -I test_keys.py
 	$(BUILD)/gbtest shot $(ROMS)/dmg-acid2.gb 120 1x $(BUILD)/acid2-1x.png
 	python3 -I compare_png.py $(BUILD)/acid2-1x.png $(ROMS)/dmg-acid2-reference.png 80 48
 	@echo "ALL TESTS PASSED"

@@ -34,6 +34,24 @@ STATIC mp_obj_t gb_sim_setup(mp_obj_t disp_in, mp_obj_t keys_in)
 }
 MP_DEFINE_CONST_FUN_OBJ_2(gb_sim_setup_obj, gb_sim_setup);
 
+// _gameboy.sim_keys(keynums): set which keys are held. The firmware's own
+// key reader (unix/variant/touch.py) reads the same pipe while the game
+// is paused, so the reports it took are passed over this way.
+STATIC mp_obj_t gb_sim_keys(mp_obj_t keys_in)
+{
+    mp_buffer_info_t buf;
+    mp_get_buffer_raise(keys_in, &buf, MP_BUFFER_READ);
+
+    keys_held = 0;
+    for(size_t i = 0; i < buf.len; i++) {
+        uint8_t kn = ((const uint8_t *)buf.buf)[i];
+        if(kn < 64) keys_held |= 1ULL << kn;
+    }
+
+    return mp_const_none;
+}
+MP_DEFINE_CONST_FUN_OBJ_1(gb_sim_keys_obj, gb_sim_keys);
+
 static void write_all(const void *data, size_t len)
 {
     const uint8_t *p = data;

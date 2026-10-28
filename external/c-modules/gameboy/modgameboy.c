@@ -435,6 +435,7 @@ STATIC MP_DEFINE_CONST_FUN_OBJ_0(gb_keys_obj, gb_keys);
 
 #ifdef GB_HAL_UNIX
 extern const mp_obj_fun_builtin_fixed_t gb_sim_setup_obj;
+extern const mp_obj_fun_builtin_fixed_t gb_sim_keys_obj;
 #endif
 
 STATIC const mp_rom_map_elem_t mp_module_gameboy_globals_table[] = {
@@ -443,6 +444,7 @@ STATIC const mp_rom_map_elem_t mp_module_gameboy_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_keys), MP_ROM_PTR(&gb_keys_obj) },
 #ifdef GB_HAL_UNIX
     { MP_ROM_QSTR(MP_QSTR_sim_setup), MP_ROM_PTR(&gb_sim_setup_obj) },
+    { MP_ROM_QSTR(MP_QSTR_sim_keys), MP_ROM_PTR(&gb_sim_keys_obj) },
 #endif
 
     { MP_ROM_QSTR(MP_QSTR_RUN_FRAMES), MP_ROM_INT(GB_RUN_FRAMES) },
