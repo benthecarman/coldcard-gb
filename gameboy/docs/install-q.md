@@ -4,6 +4,25 @@ This firmware is for a **dev unit with no funds on it**. It is signed with
 key zero, the key Coinkite publishes for custom builds. The Q accepts it, but
 shows a warning on every boot.
 
+## Read this first
+
+Custom firmware that fails before the PIN screen can't be removed. The
+bootloader starts any correctly signed image. Its microSD recovery mode only
+reinstalls the image that was already installed, and retail units have no
+USB DFU or debug port (`stm32/mk4-bootloader/main.c`, `sdcard.c`,
+`docs/dev-access.md`). Official firmware can only be installed from a
+firmware that reaches the PIN screen.
+
+On 2026-10-28 a build of this tree made with the host compiler (GCC 15, from
+upstream master) boot-looped a Q on the warning screen, and the Q could not
+be recovered. So:
+
+- Only flash firmware built with `gameboy/scripts/build-q1.sh`. It builds
+  in Coinkite's Docker image, from the release tag this branch is based on.
+- On a new unit, first flash a key-zero build of the *unmodified* release,
+  and check that it boots, logs in, and can go back to official firmware.
+  Only then flash the Game Boy build.
+
 ## Build
 
 One-time setup (see also `unix/README.md` for the venv):
@@ -13,19 +32,21 @@ cd stm32
 make -f Q1-Makefile setup
 ```
 
-Then:
+Then commit your changes and run:
 
 ```
 gameboy/scripts/build-q1.sh
 ```
 
-This builds, signs with key zero, and writes `stm32/gameboy-q.dfu`. The
-script prints `signit check` (model `Q1`, `pubkey_num: 0`, `ECDSA Signature:
-CORRECT`) and the file's SHA-256.
+This builds HEAD in Docker (Alpine, GCC 11), signs it with key zero, and
+writes `stm32/gameboy-q.dfu`. The script prints `signit check` (model `Q1`,
+`pubkey_num: 0`) and the file's SHA-256. The Docker step also compares the
+build with the official release and reports a mismatch; that is expected for
+this fork.
 
-The official builds use Alpine's GCC 11 in Docker. This machine has GCC 15,
-so the binary is not byte-for-byte the same as a reproducible build, and the
-script turns off three new GCC 15 errors in old MicroPython code.
+To check the toolchain, build the unmodified release tag the same way
+(`make -f Q1-Makefile repro` in a clean clone at the tag). It must report
+"bit-for-bit identical" with Coinkite's release.
 
 ## Load
 

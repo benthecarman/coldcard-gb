@@ -4,6 +4,9 @@ Unofficial fork of [Coldcard/firmware](https://github.com/Coldcard/firmware)
 that adds a Game Boy (DMG) emulator to the Q, under **Advanced/Tools > Game Boy**.
 The emulator is [Peanut-GB](https://github.com/deltabeard/Peanut-GB) in C.
 
+master is based on the Q release tag `2026-09-30T2025-v1.5.3Q`, not on
+upstream master, so the firmware is built from released code.
+
 ## Where things are
 
 | Path | What |
@@ -16,7 +19,7 @@ The emulator is [Peanut-GB](https://github.com/deltabeard/Peanut-GB) in C.
 | `unix/simulator.py` | numpy blit for raw pixel messages, and reads big display updates in full |
 | `gameboy/test/` | headless test runner (host gcc) |
 | `gameboy/bench/` | instruction counts on an emulated Cortex-M4 (QEMU) |
-| `gameboy/scripts/build-q1.sh` | builds and signs the Q firmware (`stm32/gameboy-q.dfu`), see `docs/install-q.md` |
+| `gameboy/scripts/build-q1.sh` | builds the Q firmware in Coinkite's Docker image and signs it with key zero (`stm32/gameboy-q.dfu`); read `docs/install-q.md` before flashing |
 | `gameboy/scripts/build-sim.sh` | builds the simulator with the flags GCC 15 needs |
 | `gameboy/scripts/fetch-test-roms.sh` | downloads pinned, freely licensed test ROMs to `gameboy/roms/` |
 | `gameboy/docs/` | design notes and install guide |
