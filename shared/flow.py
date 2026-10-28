@@ -49,6 +49,11 @@ else:
     kt_start_rx = None
     kt_send_file_psbt = None
 
+async def start_gameboy(*a):
+    # Game Boy emulator (Q only): loaded only when picked
+    from gameboy import start_gameboy as start
+    await start(*a)
+
 #
 # NOTE: "Always In Title Case"
 #
@@ -304,6 +309,7 @@ AdvancedPinnedVirginMenu = [            # Has PIN but no secrets yet
     MenuItem("File Management", menu=FileMgmtMenu),
     MenuItem("Key Teleport (start)", f=kt_start_rx, predicate=version.has_qr),
     MenuItem('Paper Wallets', f=make_paper_wallet),
+    MenuItem('Game Boy', f=start_gameboy, predicate=version.has_qwerty),
     MenuItem('Perform Selftest', f=start_selftest),
     MenuItem("I Am Developer.", menu=maybe_dev_menu),
     MenuItem('Secure Logout', f=logout_now, predicate=not version.has_battery),
@@ -432,6 +438,7 @@ AdvancedNormalMenu = [
     MenuItem("Key Teleport (start)", f=kt_start_rx, predicate=version.has_qr),
     MenuItem("Spending Policy", menu=SpendingPolicySubMenu,shortcut='s',predicate=has_real_secret),
     MenuItem('Paper Wallets', f=make_paper_wallet),
+    MenuItem('Game Boy', f=start_gameboy, predicate=version.has_qwerty),
     MenuItem('WIF Store', menu=WIFStoreMenu.make),
     MenuItem('NFC Tools', predicate=nfc_enabled, menu=NFCToolsMenu, shortcut=KEY_NFC),
     MenuItem("Danger Zone", menu=DangerZoneMenu, shortcut='z'),
