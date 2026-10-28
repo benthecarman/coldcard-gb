@@ -1,7 +1,8 @@
 # Headless test runner for the Game Boy core (host build).
 #
 #   make            build build/gbtest
-#   make test       fetch test ROMs, run cpu_instrs, instr_timing, dmg-acid2
+#   make test       fetch test ROMs, run cpu_instrs, instr_timing, a save
+#                   state round trip, dmg-acid2
 #
 CORE    = ../../external/c-modules/gameboy
 ROMS    = ../roms
@@ -26,6 +27,7 @@ test: $(BUILD)/gbtest roms
 	$(BUILD)/gbtest serial $(ROMS)/cpu_instrs.gb 10000
 	$(BUILD)/gbtest -s 1 serial $(ROMS)/cpu_instrs.gb 10000
 	$(BUILD)/gbtest serial $(ROMS)/instr_timing.gb 1000
+	$(BUILD)/gbtest state $(ROMS)/tobu.gb 900
 	$(BUILD)/gbtest shot $(ROMS)/dmg-acid2.gb 120 1x $(BUILD)/acid2-1x.png
 	python3 -I compare_png.py $(BUILD)/acid2-1x.png $(ROMS)/dmg-acid2-reference.png 80 48
 	@echo "ALL TESTS PASSED"

@@ -16,6 +16,10 @@
 //       Run FRAMES frames as fast as possible; print host speed and
 //       bank cache stats.
 //
+//   gbtest [-s SLOTS] state ROM FRAMES
+//       Run FRAMES frames, save state, load it into a second emulator,
+//       then run both on and check they stay identical.
+//
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,6 +44,8 @@ void test_fail(const char *fmt, ...)
     exit(1);
 }
 
+static ccgb_t *start(const uint8_t *rom, uint32_t padded, int n_slots);
+
 static ccgb_t *load(const char *path, int n_slots)
 {
     FILE *f = fopen(path, "rb");
@@ -58,6 +64,12 @@ static ccgb_t *load(const char *path, int n_slots)
     hal_rom_write(rom, tmp, padded);
     free(tmp);
 
+    return start(rom, padded, n_slots);
+}
+
+// Emulator for a ROM image already in place
+static ccgb_t *start(const uint8_t *rom, uint32_t padded, int n_slots)
+{
     ccgb_t *c = calloc(1, sizeof(ccgb_t));
     uint8_t *bank0 = malloc(GB_BANK_SIZE);
     uint8_t *slots[GB_MAX_SLOTS];
@@ -168,7 +180,8 @@ static void usage(void)
 {
     fprintf(stderr, "usage: gbtest [-s SLOTS] serial ROM MAX_FRAMES\n"
                     "       gbtest [-s SLOTS] shot ROM FRAMES MODE OUT.png [grey|green]\n"
-                    "       gbtest [-s SLOTS] bench ROM FRAMES\n");
+                    "       gbtest [-s SLOTS] bench ROM FRAMES\n"
+                    "       gbtest [-s SLOTS] state ROM FRAMES\n");
     exit(2);
 }
 
@@ -219,6 +232,45 @@ int main(int argc, char **argv)
         printf("%u frames in %.3f s: %.0f fps on this host\n", frames, secs, frames / secs);
         printf("groups sent: %u, cache hits: %u, misses: %u\n",
                c->stats.lines_sent, c->stats.cache_hits, c->stats.cache_misses);
+        return 0;
+    }
+
+    if(!strcmp(cmd, "state")) {
+        const int after = 600;
+
+        ccgb_set_video(c, VIDEO_1X, PAL_GREY, 0);
+        run_frames(c, frames);
+
+        // what a state file holds: header, gb_s, cart RAM
+        uint8_t hdr[GB_STATE_HDR];
+        ccgb_state_header(c, hdr);
+        uint8_t *st = malloc(sizeof(struct gb_s));
+        memcpy(st, &c->gb, sizeof(struct gb_s));
+
+        ccgb_t *d = start(c->rom, c->rom_size, n_slots);
+        uint8_t hdr2[GB_STATE_HDR];
+        ccgb_state_header(d, hdr2);
+        if(memcmp(hdr, hdr2, sizeof(hdr))) test_fail("state headers differ");
+
+        if(c->cart_ram_size) memcpy(d->cart_ram, c->cart_ram, c->cart_ram_size);
+        ccgb_state_load(d, st);
+        ccgb_set_video(d, VIDEO_1X, PAL_GREY, 0);
+
+        for(int i = 0; i < after; i++) {
+            run_frames(c, 1);
+            run_frames(d, 1);
+            if(memcmp(c->fb, d->fb, sizeof(c->fb))) test_fail("frame %d differs", i);
+        }
+        if(memcmp(c->gb.wram, d->gb.wram, sizeof(c->gb.wram))
+           || memcmp(&c->gb.cpu_reg, &d->gb.cpu_reg, sizeof(c->gb.cpu_reg))) {
+            test_fail("state differs after %d frames", after);
+        }
+        if(c->cart_ram_size && memcmp(c->cart_ram, d->cart_ram, c->cart_ram_size)) {
+            test_fail("cart RAM differs");
+        }
+
+        printf("state: %zu + %u bytes; restored run matches for %d frames\n",
+               sizeof(struct gb_s), c->cart_ram_size, after);
         return 0;
     }
 
