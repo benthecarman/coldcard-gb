@@ -21,6 +21,7 @@
 //       then run both on and check they stay identical.
 //
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -32,6 +33,17 @@
 
 static const uint32_t PAL_GREY[4] = { 0xffffff, 0xaaaaaa, 0x555555, 0x000000 };
 static const uint32_t PAL_GREEN[4] = { 0xe0f8d0, 0x88c070, 0x346856, 0x081820 };
+static const uint32_t PAL_MONO[4] = { 0xffffff, 0xffffff, 0x000000, 0x000000 };
+static const uint32_t PAL_INVERSE[4] = { 0x000000, 0x555555, 0xaaaaaa, 0xffffff };
+
+static const uint32_t *parse_palette(const char *s)
+{
+    if(!strcmp(s, "grey")) return PAL_GREY;
+    if(!strcmp(s, "green")) return PAL_GREEN;
+    if(!strcmp(s, "mono")) return PAL_MONO;
+    if(!strcmp(s, "inverse")) return PAL_INVERSE;
+    test_fail("unknown palette %s", s);
+}
 
 void test_fail(const char *fmt, ...)
 {
@@ -85,10 +97,10 @@ static ccgb_t *start(const uint8_t *rom, uint32_t padded, int n_slots)
         ccgb_set_cart_ram(c, mem, ram);
     }
 
-    // default Q keymap; no keys are pressed in these tests
+    // menu = Q's CANCEL; no keys are pressed in these tests
     uint8_t km[GB_KEYMAP_BYTES];
     memset(km, GB_NO_KEY, sizeof(km));
-    km[GB_KEYMAP_BYTES - 2] = 7;        // menu = CANCEL
+    km[offsetof(gb_keymap_t, menu)] = 7;
     ccgb_set_keymap(c, km);
 
     return c;
@@ -100,6 +112,10 @@ static int parse_mode(const char *s)
     if(!strcmp(s, "1.5x")) return VIDEO_15_SMOOTH;
     if(!strcmp(s, "1.5x-sharp")) return VIDEO_15_SHARP;
     if(!strcmp(s, "2x")) return VIDEO_2X_CROP;
+    if(!strcmp(s, "oled-top")) return VIDEO_OLED_TOP;
+    if(!strcmp(s, "oled-middle")) return VIDEO_OLED_MIDDLE;
+    if(!strcmp(s, "oled-bottom")) return VIDEO_OLED_BOTTOM;
+    if(!strcmp(s, "oled-fit")) return VIDEO_OLED_FIT;
     test_fail("unknown mode %s", s);
 }
 
@@ -176,10 +192,97 @@ static void save_png(const char *path)
     free(z);
 }
 
+// OLED renderer checks on made-up frame buffers
+static int oled_lit(const uint8_t *buf, int x, int y)
+{
+    return (buf[(y / 8) * OLED_W + x] >> (y & 7)) & 1;
+}
+
+static int oled_count(const uint8_t *buf)
+{
+    int n = 0;
+    for(int y = 0; y < OLED_H; y++) {
+        for(int x = 0; x < OLED_W; x++) n += oled_lit(buf, x, y);
+    }
+    return n;
+}
+
+static void fb_fill(uint8_t fb[GB_H][GB_LINE_BYTES], int shade)
+{
+    memset(fb, shade * 0x55, GB_H * GB_LINE_BYTES);
+}
+
+static void fb_set(uint8_t fb[GB_H][GB_LINE_BYTES], int x, int y, int shade)
+{
+    uint8_t *b = &fb[y][x / 4];
+    int sh = (x & 3) * 2;
+    *b = (*b & ~(3 << sh)) | (shade << sh);
+}
+
+static int oled_checks(void)
+{
+    static uint8_t fb[GB_H][GB_LINE_BYTES];
+    static uint8_t out[OLED_BYTES];
+    gb_oled_t o;
+    const int all = OLED_W * OLED_H;
+
+    // grey ramp: shades light up 4, 3, 1 and 0 of every 4 pixels
+    gb_oled_setup(&o, VIDEO_OLED_FIT, PAL_GREY);
+    const int want[4] = { all, all * 3 / 4, all / 4, 0 };
+    for(int s = 0; s < 4; s++) {
+        fb_fill(fb, s);
+        gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+        if(oled_count(out) != want[s]) test_fail("shade %d: %d lit", s, oled_count(out));
+    }
+
+    // two-tone and inverse
+    gb_oled_setup(&o, VIDEO_OLED_TOP, PAL_MONO);
+    fb_fill(fb, 1);
+    gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+    if(oled_count(out) != all) test_fail("mono: light grey not lit");
+    gb_oled_setup(&o, VIDEO_OLED_TOP, PAL_INVERSE);
+    fb_fill(fb, 3);
+    gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+    if(oled_count(out) != all) test_fail("inverse: black not lit");
+
+    // every view keeps a one-pixel dark line, in either direction, on
+    // every GB column and line it shows
+    const int modes[4] = { VIDEO_OLED_TOP, VIDEO_OLED_MIDDLE, VIDEO_OLED_BOTTOM, VIDEO_OLED_FIT };
+    for(int m = 0; m < 4; m++) {
+        gb_oled_setup(&o, modes[m], PAL_MONO);
+        for(int gx = 0; gx < GB_W; gx++) {
+            fb_fill(fb, 0);
+            for(int y = 0; y < GB_H; y++) fb_set(fb, gx, y, 3);
+            gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+            if(oled_count(out) != all - OLED_H) test_fail("mode %d: column %d", modes[m], gx);
+        }
+        for(int gy = o.first; gy < o.first + o.lines; gy++) {
+            fb_fill(fb, 0);
+            for(int x = 0; x < GB_W; x++) fb_set(fb, x, gy, 3);
+            gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+            if(oled_count(out) != all - OLED_W) test_fail("mode %d: line %d", modes[m], gy);
+        }
+    }
+
+    // window views show their lines 1:1
+    gb_oled_setup(&o, VIDEO_OLED_BOTTOM, PAL_MONO);
+    fb_fill(fb, 0);
+    fb_set(fb, 0, 80, 3);
+    fb_set(fb, 159, 143, 3);
+    gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+    if(oled_lit(out, 0, 0) || oled_lit(out, 127, 63) || oled_count(out) != all - 2) {
+        test_fail("bottom view corners");
+    }
+
+    printf("oled checks passed\n");
+    return 0;
+}
+
 static void usage(void)
 {
     fprintf(stderr, "usage: gbtest [-s SLOTS] serial ROM MAX_FRAMES\n"
-                    "       gbtest [-s SLOTS] shot ROM FRAMES MODE OUT.png [grey|green]\n"
+                    "       gbtest [-s SLOTS] shot ROM FRAMES MODE OUT.png [grey|green|mono|inverse]\n"
+                    "       gbtest oled\n"
                     "       gbtest [-s SLOTS] bench ROM FRAMES\n"
                     "       gbtest [-s SLOTS] state ROM FRAMES\n");
     exit(2);
@@ -193,6 +296,9 @@ int main(int argc, char **argv)
         n_slots = atoi(argv[2]);
         argv += 2;
         argc -= 2;
+    }
+    if(argc == 2 && !strcmp(argv[1], "oled")) {
+        return oled_checks();
     }
     if(argc < 4) usage();
 
@@ -213,7 +319,7 @@ int main(int argc, char **argv)
 
     if(!strcmp(cmd, "shot")) {
         if(argc < 6) usage();
-        const uint32_t *pal = (argc > 6 && !strcmp(argv[6], "green")) ? PAL_GREEN : PAL_GREY;
+        const uint32_t *pal = (argc > 6) ? parse_palette(argv[6]) : PAL_GREY;
         ccgb_set_video(c, parse_mode(argv[4]), pal, 0x202020);
         run_frames(c, frames);
         save_png(argv[5]);

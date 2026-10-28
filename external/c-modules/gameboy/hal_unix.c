@@ -1,9 +1,14 @@
 //
 // hal_unix.c - gb_hal.h for the desktop simulator (unix/simulator.py).
 //
-// Pixels go down the simulator's display pipe as 'r' (raw RGB565) and 'f'
-// (fill) messages, same as unix/variant/st7788.py. Key state comes from the
-// simulator's key pipe: 5-byte reports of held Q key numbers, 255 = none.
+// Q: pixels go down the simulator's display pipe as 'r' (raw RGB565) and
+// 'f' (fill) messages, same as unix/variant/st7788.py. Key state comes from
+// the simulator's key pipe: 5-byte reports of held Q key numbers, 255 = none.
+//
+// Mk4: OLED frames go down the display pipe as 1024 bytes, as from
+// unix/variant/ssd1306.py. The key pipe carries a key's character when it
+// goes down and a NUL when all keys are up (unix/variant/touch.py), so a
+// key released while another is held stays down until both are up.
 //
 #include <errno.h>
 #include <poll.h>
@@ -19,20 +24,25 @@
 
 const bool hal_lcd_big_endian = false;
 
+// Mk4 key numbers are positions in this string (shared/mempad.py)
+static const char MK4_KEYS[] = "y0x987654321";
+
 static int display_fd = -1, keys_fd = -1;
+static bool is_mk4;
 static int win_x, win_y, win_w, win_h, win_row;
 static uint64_t keys_held;
 static uint8_t *rom_mem;
 
-// _gameboy.sim_setup(display_fd, keys_fd)
-STATIC mp_obj_t gb_sim_setup(mp_obj_t disp_in, mp_obj_t keys_in)
+// _gameboy.sim_setup(display_fd, keys_fd, mk4=False)
+STATIC mp_obj_t gb_sim_setup(size_t n_args, const mp_obj_t *args)
 {
-    display_fd = mp_obj_get_int(disp_in);
-    keys_fd = mp_obj_get_int(keys_in);
+    display_fd = mp_obj_get_int(args[0]);
+    keys_fd = mp_obj_get_int(args[1]);
+    is_mk4 = (n_args > 2) && mp_obj_is_true(args[2]);
 
     return mp_const_none;
 }
-MP_DEFINE_CONST_FUN_OBJ_2(gb_sim_setup_obj, gb_sim_setup);
+MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(gb_sim_setup_obj, 2, 3, gb_sim_setup);
 
 // _gameboy.sim_keys(keynums): set which keys are held. The firmware's own
 // key reader (unix/variant/touch.py) reads the same pipe while the game
@@ -109,9 +119,37 @@ void hal_lcd_fill(int x, int y, int w, int h, uint16_t px)
     write_all(&px, 2);
 }
 
+void hal_oled_write(const uint8_t *buf)
+{
+    // one write: the simulator keeps only the last whole frame it reads
+    write_all(buf, 1024);
+}
+
+static void mk4_keys(void)
+{
+    struct pollfd pfd = { .fd = keys_fd, .events = POLLIN };
+
+    while(keys_fd >= 0 && poll(&pfd, 1, 0) == 1 && (pfd.revents & POLLIN)) {
+        char ch;
+        if(read(keys_fd, &ch, 1) != 1) break;
+
+        if(ch == 0) {
+            keys_held = 0;
+        } else {
+            const char *p = strchr(MK4_KEYS, ch);
+            if(p) keys_held |= 1ULL << (p - MK4_KEYS);
+        }
+    }
+}
+
 uint64_t hal_keys(void)
 {
     struct pollfd pfd = { .fd = keys_fd, .events = POLLIN };
+
+    if(is_mk4) {
+        mk4_keys();
+        return keys_held;
+    }
 
     while(keys_fd >= 0 && poll(&pfd, 1, 0) == 1 && (pfd.revents & POLLIN)) {
         uint8_t rpt[5];

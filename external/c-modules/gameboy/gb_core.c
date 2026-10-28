@@ -234,7 +234,30 @@ ccgb_set_keymap(ccgb_t *c, const uint8_t map[GB_KEYMAP_BYTES])
     void
 ccgb_set_video(ccgb_t *c, int mode, const uint32_t rgb[4], uint32_t border)
 {
-    gb_video_setup(&c->video, mode, rgb, border, hal_lcd_big_endian);
+    c->video_mode = mode;
+    memcpy(c->palette, rgb, sizeof(c->palette));
+    if(VIDEO_IS_OLED(mode)) {
+        gb_oled_setup(&c->oled, mode, rgb);
+    } else {
+        gb_video_setup(&c->video, mode, rgb, border, hal_lcd_big_endian);
+    }
+    c->full_redraw = true;
+}
+
+    int
+ccgb_video_mode(ccgb_t *c)
+{
+    return c->video_mode;
+}
+
+// View key: next OLED view
+static void next_view(ccgb_t *c)
+{
+    int mode = c->video_mode + 1;
+    if(mode >= VIDEO_OLED_END) mode = VIDEO_OLED_TOP;
+
+    c->video_mode = mode;
+    gb_oled_setup(&c->oled, mode, c->palette);
     c->full_redraw = true;
 }
 
@@ -332,6 +355,9 @@ static uint8_t joypad_from_keys(const gb_keymap_t *km, uint64_t keys)
 static void draw_border(ccgb_t *c)
 {
     const gb_video_t *v = &c->video;
+
+    if(VIDEO_IS_OLED(c->video_mode)) return;      // OLED frames are whole
+
     int right = v->x + v->w, bottom = v->y + v->h;
 
     if(v->y) hal_lcd_fill(0, 0, HAL_LCD_W, v->y, v->border);
@@ -353,10 +379,38 @@ static bool group_changed(const ccgb_t *c, int group)
     return false;
 }
 
+// OLED: send the whole frame if any line it uses changed
+static void present_oled(ccgb_t *c)
+{
+    const gb_oled_t *o = &c->oled;
+    bool changed = c->full_redraw;
+
+    for(int i = 0; i < o->lines && !changed; i++) {
+        changed = c->line_dirty[o->first + i];
+    }
+
+    if(changed) {
+        gb_oled_render(o, (const uint8_t (*)[GB_LINE_BYTES])c->fb, c->oled_buf);
+        hal_oled_write(c->oled_buf);
+        c->stats.lines_sent += OLED_H;
+    }
+
+    // lines outside the view count as shown: a new view redraws in full
+    memcpy(c->fb_shown, c->fb, sizeof(c->fb));
+    memset(c->line_dirty, 0, sizeof(c->line_dirty));
+    c->full_redraw = false;
+}
+
 // Send the lines that changed since the last frame shown.
 static void present(ccgb_t *c)
 {
     const gb_video_t *v = &c->video;
+
+    if(VIDEO_IS_OLED(c->video_mode)) {
+        present_oled(c);
+        return;
+    }
+
     const int group_px = v->w * v->out_rows;
 
     for(int g = 0; g < v->groups; ) {
@@ -416,6 +470,7 @@ ccgb_run(ccgb_t *c, uint32_t max_frames, bool redraw)
     const gb_keymap_t *km = &c->keymap;
     const uint64_t menu_bit = key_bit(km->menu);
     const uint64_t fast_bit = key_bit(km->fast);
+    const uint64_t view_bit = key_bit(km->view);
     uint32_t count = 0;
     int rv;
 
@@ -442,6 +497,10 @@ ccgb_run(ccgb_t *c, uint32_t max_frames, bool redraw)
             c->last_keys = keys;
             rv = GB_RUN_MENU;
             break;
+        }
+        if(view_bit && (keys & view_bit) && !(c->last_keys & view_bit) && keys == view_bit
+                && VIDEO_IS_OLED(c->video_mode)) {
+            next_view(c);
         }
         c->last_keys = keys;
 

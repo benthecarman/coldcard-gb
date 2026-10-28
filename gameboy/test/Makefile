@@ -2,7 +2,8 @@
 #
 #   make            build build/gbtest
 #   make test       fetch test ROMs, run cpu_instrs, instr_timing, a save
-#                   state round trip, dmg-acid2, key ghost checks
+#                   state round trip, dmg-acid2, key ghost checks, OLED
+#                   renderer checks
 #
 CORE    = ../../external/c-modules/gameboy
 ROMS    = ../roms
@@ -11,7 +12,7 @@ BUILD   = build
 CFLAGS  += -O2 -g -Wall -Wextra -I$(CORE) -I. $(shell pkg-config --cflags zlib)
 LDLIBS  += $(shell pkg-config --libs zlib)
 
-SRCS    = gbtest.c hal_test.c $(CORE)/gb_core.c $(CORE)/gb_video.c
+SRCS    = gbtest.c hal_test.c $(CORE)/gb_core.c $(CORE)/gb_video.c $(CORE)/gb_oled.c
 HDRS    = $(wildcard $(CORE)/*.h) hal_test.h
 
 all: $(BUILD)/gbtest
@@ -29,6 +30,7 @@ test: $(BUILD)/gbtest roms
 	$(BUILD)/gbtest serial $(ROMS)/instr_timing.gb 1000
 	$(BUILD)/gbtest state $(ROMS)/tobu.gb 900
 	python3 -I test_keys.py
+	$(BUILD)/gbtest oled
 	$(BUILD)/gbtest shot $(ROMS)/dmg-acid2.gb 120 1x $(BUILD)/acid2-1x.png
 	python3 -I compare_png.py $(BUILD)/acid2-1x.png $(ROMS)/dmg-acid2-reference.png 80 48
 	@echo "ALL TESTS PASSED"

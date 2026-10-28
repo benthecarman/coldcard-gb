@@ -174,6 +174,7 @@ void hal_lcd_sync(void) { }
 void hal_lcd_window(int x, int y, int w, int h) { (void)x; (void)y; (void)w; (void)h; lcd_windows++; }
 void hal_lcd_write(const uint16_t *px, int count) { (void)px; lcd_bytes += count * 2; }
 void hal_lcd_fill(int x, int y, int w, int h, uint16_t px) { (void)x; (void)y; (void)px; lcd_bytes += w * h * 2; }
+void hal_oled_write(const uint8_t *buf) { (void)buf; lcd_bytes += 1024; }
 
 // press Start now and then to get past title screens; hold Right in between
 uint64_t hal_keys(void)
@@ -206,6 +207,8 @@ static const struct { int mode; const char *name; } MODES[] = {
     { VIDEO_15_SMOOTH, "1.5x-smooth" },
     { VIDEO_1X, "1x" },
     { VIDEO_2X_CROP, "2x-crop" },
+    { VIDEO_OLED_MIDDLE, "oled-middle" },
+    { VIDEO_OLED_FIT, "oled-fit" },
 };
 
 static void bench_mode(int mode, const char *name)
@@ -228,7 +231,7 @@ static void bench_mode(int mode, const char *name)
     // default Q keymap from shared/gameboy.py
     static const uint8_t km[GB_KEYMAP_BYTES] = {
         37, 0xff, 36, 0xff, 52, 0xff, 8, 0xff,
-        32, 6, 30, 3, 21, 4, 31, 5, 7, 28,
+        32, 6, 30, 3, 21, 4, 31, 5, 7, 28, 0xff,
     };
     ccgb_set_keymap(c, km);
     ccgb_set_video(c, mode, PAL, 0);

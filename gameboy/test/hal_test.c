@@ -1,8 +1,9 @@
 //
 // hal_test.c - gb_hal.h for the headless test runner.
 //
-// The LCD is an in-memory 320x240 RGB565 screen. Time is virtual: waiting
-// moves the clock forward, so runs are fast and deterministic.
+// The LCD is an in-memory 320x240 RGB565 screen; OLED frames are drawn
+// on it at 2x. Time is virtual: waiting moves the clock forward, so runs
+// are fast and deterministic.
 //
 #include <stdlib.h>
 #include <string.h>
@@ -48,6 +49,23 @@ void hal_lcd_fill(int x, int y, int w, int h, uint16_t px)
     for(int r = 0; r < h; r++) {
         for(int i = 0; i < w; i++) test_screen[y + r][x + i] = px;
     }
+}
+
+void hal_oled_write(const uint8_t *buf)
+{
+    // lit pixels in the simulator's OLED colour (#ccf), on near black
+    const uint16_t on = 0xce7f, off = 0x1082;
+    const int x0 = (HAL_LCD_W - 2 * 128) / 2, y0 = (HAL_LCD_H - 2 * 64) / 2;
+
+    for(int y = 0; y < 64; y++) {
+        for(int x = 0; x < 128; x++) {
+            uint16_t px = ((buf[(y / 8) * 128 + x] >> (y & 7)) & 1) ? on : off;
+            for(int k = 0; k < 4; k++) {
+                test_screen[y0 + 2 * y + k / 2][x0 + 2 * x + k % 2] = px;
+            }
+        }
+    }
+    test_lcd_writes++;
 }
 
 uint64_t hal_keys(void)

@@ -1,8 +1,9 @@
 //
 // gb_hal.h - platform layer for the Game Boy emulator.
 //
-// Implemented by hal_q1.c (COLDCARD Q hardware), hal_unix.c (desktop
-// simulator) and gameboy/test/hal_test.c (headless test runner).
+// Implemented by hal_q1.c (COLDCARD Q), hal_mk4.c (COLDCARD Mk4),
+// hal_unix.c (desktop simulator) and gameboy/test/hal_test.c (headless
+// test runner).
 //
 #pragma once
 
@@ -37,8 +38,14 @@ void hal_lcd_sync(void);
 // Fill a rectangle with one colour (pixel already in wire byte order).
 void hal_lcd_fill(int x, int y, int w, int h, uint16_t px);
 
-// Keyboard: bit N set when Q key number N (row*10 + col, as in
-// shared/charcodes.py) is held right now.
+// Mk4 OLED, 128x64, one bit per pixel in SSD1309 page layout (see
+// gb_oled.h). Only called in the OLED video modes. Sends a whole frame;
+// returns when the buffer can be reused.
+void hal_oled_write(const uint8_t *buf);
+
+// Keyboard: bit N set when key number N is held right now. On the Q, key
+// numbers are row*10 + col, as in shared/charcodes.py; on the Mk4,
+// row*3 + col of the keypad matrix, as in shared/mempad.py.
 uint64_t hal_keys(void);
 
 // Monotonic microsecond clock, and a wait until it reaches a value.

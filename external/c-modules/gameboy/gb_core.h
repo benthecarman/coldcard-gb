@@ -21,6 +21,7 @@
 #include "peanut_gb.h"
 
 #include "gb_video.h"
+#include "gb_oled.h"
 
 #define GB_BANK_SIZE        0x4000
 #define GB_MAX_SLOTS        16
@@ -43,15 +44,17 @@ enum {
 #define GB_KEYS_PER_BTN     2
 #define GB_NO_KEY           0xff
 
-// Q key numbers (row*10 + col) for each button, then the menu and
-// fast-forward keys. Unused entries are GB_NO_KEY.
+// Key numbers (see hal_keys()) for each button, then the menu,
+// fast-forward and view keys. Unused entries are GB_NO_KEY. The view key
+// steps through the OLED views; like the menu key, it only counts alone.
 typedef struct {
     uint8_t btn[GB_NUM_BTN][GB_KEYS_PER_BTN];
     uint8_t menu;
     uint8_t fast;
+    uint8_t view;
 } gb_keymap_t;
 
-#define GB_KEYMAP_BYTES     (GB_NUM_BTN * GB_KEYS_PER_BTN + 2)
+#define GB_KEYMAP_BYTES     (GB_NUM_BTN * GB_KEYS_PER_BTN + 3)
 
 typedef struct {
     uint32_t frames;            // emulated
@@ -90,9 +93,13 @@ typedef struct ccgb_s {
     uint8_t fb_shown[GB_H][GB_LINE_BYTES] __attribute__((aligned(4)));
     bool line_dirty[GB_H];
     bool full_redraw;
-    gb_video_t video;
+    int video_mode;             // VIDEO_* from gb_video.h or gb_oled.h
+    uint32_t palette[4];
+    gb_video_t video;           // LCD modes
     uint16_t out_buf[2][4 * VIDEO_MAX_GROUP_PX];
     int out_next;               // which out_buf to fill next
+    gb_oled_t oled;             // OLED modes
+    uint8_t oled_buf[OLED_BYTES];
 
     gb_keymap_t keymap;
     uint64_t last_keys;
@@ -123,6 +130,9 @@ void ccgb_set_cart_ram(ccgb_t *c, uint8_t *ram, uint32_t size);
 
 void ccgb_set_keymap(ccgb_t *c, const uint8_t map[GB_KEYMAP_BYTES]);
 void ccgb_set_video(ccgb_t *c, int mode, const uint32_t rgb[4], uint32_t border);
+
+// Current video mode: the view key changes it while a game runs.
+int ccgb_video_mode(ccgb_t *c);
 
 // Cart RAM was written out: clear the dirty flag.
 void ccgb_saved(ccgb_t *c);

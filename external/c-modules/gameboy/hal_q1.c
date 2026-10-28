@@ -145,6 +145,12 @@ void hal_lcd_fill(int x, int y, int w, int h, uint16_t px)
     hal_lcd_sync();
 }
 
+void hal_oled_write(const uint8_t *buf)
+{
+    // the Q has no OLED; Python only offers the LCD video modes here
+    (void)buf;
+}
+
 uint64_t hal_keys(void)
 {
     uint64_t held = 0;

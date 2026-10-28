@@ -5,15 +5,18 @@
 #
 #   simdrive.py key NAME [HOLD_MS]      # X keysym name: Return, Escape, Down, k ...
 #   simdrive.py keys NAME,NAME... [HOLD_MS]   # hold several at once
-#   simdrive.py shot OUT.png            # save the 320x240 LCD
+#   simdrive.py shot OUT.png            # save the 320x240 LCD (Q)
+#   simdrive.py oled OUT.png            # save the 128x64 OLED at 3x (Mk4)
 #
 # Needs python-xlib (pip install python-xlib) and ImageMagick's `import`.
 # Uses $DISPLAY. The simulator window opens at (100, 100) and its LCD is at
-# (95, 96) inside it, see LCDSimulator.TOPLEFT in unix/simulator.py.
+# (95, 96) inside it, see LCDSimulator.TOPLEFT in unix/simulator.py; the
+# Mk4 OLED is at (46, 85), see Mk4OLEDSimulator.OLED_ACTIVE.
 #
 import subprocess, sys, time
 
 LCD_X, LCD_Y = 100 + 95, 100 + 96
+OLED_X, OLED_Y = 100 + 46, 100 + 85
 
 
 def press(names, hold_ms):
@@ -46,6 +49,12 @@ def shot(path):
                            '-crop', '320x240+%d+%d' % (LCD_X, LCD_Y), '+repage', path])
 
 
+def oled(path):
+    subprocess.check_call(['import', '-window', 'root',
+                           '-crop', '128x64+%d+%d' % (OLED_X, OLED_Y), '+repage',
+                           '-filter', 'point', '-resize', '300%', path])
+
+
 def main():
     cmd = sys.argv[1]
     if cmd == 'key':
@@ -54,6 +63,8 @@ def main():
         press(sys.argv[2].split(','), int(sys.argv[3]) if len(sys.argv) > 3 else 80)
     elif cmd == 'shot':
         shot(sys.argv[2])
+    elif cmd == 'oled':
+        oled(sys.argv[2])
     else:
         sys.exit(__doc__)
 

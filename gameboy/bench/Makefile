@@ -17,7 +17,7 @@ CFLAGS  = -mthumb -mcpu=cortex-m4 -mtune=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi
           -DBENCH_FRAMES=$(FRAMES)
 LDFLAGS = -nostartfiles -T link.ld -Wl,--gc-sections --specs=nano.specs
 
-SRCS    = bench.c $(CORE)/gb_core.c $(CORE)/gb_video.c
+SRCS    = bench.c $(CORE)/gb_core.c $(CORE)/gb_video.c $(CORE)/gb_oled.c
 
 # the firmware's memcpy/memset/memcmp (MicroPython's, built -O2), not newlib's
 STRING0 = ../../external/micropython/lib/libc/string0.c
