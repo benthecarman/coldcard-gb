@@ -9,7 +9,7 @@ master is based on the Q release tag `2026-09-30T2025-v1.5.3Q` and includes
 the Mk4 release tag `2026-09-30T2026-v5.6.3`, not upstream master, so the
 firmware is built from released code.
 
-The Mk4 port has only run in the simulator. Don't flash it yet; see
+The Mk4 port is ready for a first test on a dev unit; see
 `docs/mk4.md`.
 
 ## Where things are
@@ -26,6 +26,7 @@ The Mk4 port has only run in the simulator. Don't flash it yet; see
 | `gameboy/test/` | headless test runner (host gcc) |
 | `gameboy/bench/` | instruction counts on an emulated Cortex-M4 (QEMU) |
 | `gameboy/scripts/build-q1.sh` | builds the Q firmware in Coinkite's Docker image and signs it with key zero (`stm32/gameboy-q.dfu`); read `docs/install-q.md` before flashing |
+| `gameboy/scripts/build-mk4.sh` | the same for the Mk4 (`stm32/gameboy-mk4.dfu`); read `docs/mk4.md` first |
 | `gameboy/scripts/build-sim.sh` | builds the simulator with the flags GCC 15 needs |
 | `gameboy/scripts/fetch-test-roms.sh` | downloads pinned, freely licensed test ROMs to `gameboy/roms/` |
 | `gameboy/docs/` | design notes, Q install guide, Mk4 notes |

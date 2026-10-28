@@ -1,11 +1,14 @@
 # Game Boy on a COLDCARD Mk4
 
-**Status: simulator only. Do not flash the Mk4 Game Boy build yet.**
+**Status: ready for a first test on a dev unit with no funds on it.** The
+plain release round trip (below) passed on a Mk4 on 2026-10-28. The Mk4
+hardware code (`external/c-modules/gameboy/hal_mk4.c`) has not run on a
+device before this test.
 
-The Mk4 port runs in the desktop simulator (`--mk4`). The Mk4 hardware
-code (`external/c-modules/gameboy/hal_mk4.c`) compiles but has not run on
-a device. The Q lesson in `install-q.md` applies here too: firmware that
-fails before the PIN screen can't be removed in the field.
+The Q lesson in `install-q.md` applies here too: firmware that fails
+before the PIN screen can't be removed in the field. So only flash Mk4
+builds made with `gameboy/scripts/build-mk4.sh`, in Coinkite's Docker
+image.
 
 master includes the Mk4 release tag `2026-09-30T2026-v5.6.3`, so Mk4
 builds come from released code.
@@ -92,3 +95,29 @@ install the official 5.6.3 DFU the same way. The custom build has a later
 timestamp, so the firmware warns about a downgrade on the way back;
 accept it. Never use **Danger Zone > Set High-Water**: it makes the
 bootloader refuse firmware older than the installed one.
+
+## Build
+
+```
+gameboy/scripts/build-mk4.sh
+```
+
+This builds the committed HEAD in Docker (Alpine, GCC 11), signs it with
+key zero, and writes `stm32/gameboy-mk4.dfu`. The Docker step also
+compares the build with the official release and reports a mismatch;
+that is expected for this fork.
+
+## Install and go back
+
+1. Copy `gameboy-mk4.dfu` and the official 5.6.3 DFU to a microSD card.
+2. Log in, then **Advanced/Tools > Upgrade Firmware > From MicroSD**, and
+   pick `gameboy-mk4.dfu`. Accept the EXTERNAL CONTRIBUTOR warning.
+3. Every boot then shows the custom-firmware warning and a delay before
+   the PIN screen.
+4. To go back, install the official DFU the same way and accept the
+   downgrade warning.
+
+The Game Boy code only runs when you pick **Advanced/Tools > Game Boy**.
+Nothing starts it at boot, so if a game hangs or the keys don't respond,
+unplug the Mk4 and plug it back in: it boots to the PIN screen as usual,
+and Upgrade Firmware is still there.
