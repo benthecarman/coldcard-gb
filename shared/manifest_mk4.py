@@ -1,6 +1,7 @@
 # Mk4 only files; would not be needed on Mk3 or earlier.
 freeze_as_mpy('', [
 	'display.py',
+	'gameboy.py',
 	'hsm.py',
 	'hsm_ux.py',
 	'mempad.py',

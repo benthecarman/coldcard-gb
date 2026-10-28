@@ -17,8 +17,9 @@ def stub(name, **attrs):
     m.__dict__.update(attrs)
     sys.modules[name] = m
 
-stub('_gameboy', NO_KEY=0xff, KEYMAP_BYTES=18, VIDEO_1X=0, VIDEO_15_SMOOTH=1,
-     VIDEO_15_SHARP=2, VIDEO_2X_CROP=3)
+stub('_gameboy', NO_KEY=0xff, KEYMAP_BYTES=19, VIDEO_1X=0, VIDEO_15_SMOOTH=1,
+     VIDEO_15_SHARP=2, VIDEO_2X_CROP=3, VIDEO_OLED_TOP=16, VIDEO_OLED_MIDDLE=17,
+     VIDEO_OLED_BOTTOM=18, VIDEO_OLED_FIT=19)
 stub('glob', dis=None, settings=None)
 stub('ux', ux_show_story=None, the_ux=None)
 stub('menu', MenuSystem=None, MenuItem=None)
@@ -27,7 +28,14 @@ stub('uasyncio', sleep_ms=None)
 stub('utime')
 stub('uos')
 
-import gameboy as gb
+def load(qwerty):
+    # gameboy.py picks its Q or Mk4 tables when imported
+    stub('version', has_qwerty=qwerty)
+    sys.modules.pop('gameboy', None)
+    import gameboy
+    return gameboy
+
+gb = load(True)
 
 def check(cond, msg):
     if not cond:
@@ -55,5 +63,24 @@ check(any('Down+A+B: also Up' in p for p in problems), 'bad map: %r' % problems)
 
 names = [gb.key_name(k) for k in (3, 7, 8, 21, 39, 52, 0xff)]
 check(names == ['LEFT', 'CANCEL', 'ENTER', 'W', "'", 'SPACE', 'none'], repr(names))
+
+# Mk4: 4x3 keypad, key number = position in 'y0x987654321'
+gb = load(False)
+mk = gb.MK4_KEYS.index
+check(gb.ghosts([mk('6'), mk('3'), mk('2')]) == {mk('5')}, 'mk4 basic ghost')
+check(gb.keymap_ok(gb.DEFAULT_KEYMAP), 'mk4 default keymap valid')
+check(len(gb.DEFAULT_KEYMAP) == 19 and gb.DEFAULT_KEYMAP[gb.POS_VIEW] == mk('5'), 'mk4 view key')
+
+# the default layout's ghosts all need A and B held with Up, or with a
+# direction and Fast-forward; and Up during the A+B+Select+Start soft
+# reset, which resets anyway
+problems = gb.ghost_problems(gb.DEFAULT_KEYMAP)
+check(all('A+B' in p for p in problems) and
+      all(p.startswith('Up') or 'Fast-forward' in p or p.startswith('A+B+Select+Start')
+          for p in problems) and len(problems) == 9,
+      'mk4 default keymap: %r' % problems)
+
+names = [gb.key_name(k) for k in (mk('y'), mk('x'), mk('5'), 0xff)]
+check(names == ['OK', 'X', '5', 'none'], repr(names))
 
 print('key tests passed')
