@@ -1459,6 +1459,72 @@ static int compare_sprites(const struct sprite_data *const sd1, const struct spr
 }
 #endif
 
+/* CCGB: draw a row of background or window tiles a tile (8 pixels) at
+ * a time, from screen column x (negative: the first tile is cut off) to
+ * the right edge. map is the tile map row, map_x the tile column at x.
+ * Gives the same pixels as the per-pixel loops it replaces (COLDCARD Q:
+ * those loops took about a third of all CPU time). */
+
+/* Bits 3..0 of n into bytes 0..3 (bit 0 of each byte): 4 pixels, left first. */
+static const uint32_t __ccgb_spread[16] = {
+	0x00000000, 0x01000000, 0x00010000, 0x01010000,
+	0x00000100, 0x01000100, 0x00010100, 0x01010100,
+	0x00000001, 0x01000001, 0x00010001, 0x01010001,
+	0x00000101, 0x01000101, 0x00010101, 0x01010101,
+};
+
+static void __ccgb_draw_tiles(struct gb_s *gb, uint8_t *pixels,
+		uint16_t map, uint8_t map_x, int x, uint8_t py)
+{
+	const uint8_t *pal = gb->display.bg_palette;
+	const bool unsigned_tiles = gb->hram_io[IO_LCDC] & LCDC_TILE_SELECT;
+	/* most games use the identity palette: shades go out as they are */
+	const bool identity = pal[0] == 0 && pal[1] == 1 && pal[2] == 2 && pal[3] == 3;
+#if PEANUT_GB_12_COLOUR
+	const uint32_t layer = LCD_PALETTE_BG * 0x01010101u;
+#else
+	const uint32_t layer = 0;
+#endif
+
+	for(; x < LCD_WIDTH; x += 8, map_x = (map_x + 1) & 0x1F)
+	{
+		uint8_t idx = gb->vram[map + map_x];
+		uint16_t tile = unsigned_tiles
+				? VRAM_TILES_1 + idx * 0x10
+				: VRAM_TILES_2 + ((idx + 0x80) % 0x100) * 0x10;
+		uint8_t t1 = gb->vram[tile + 2 * py];
+		uint8_t t2 = gb->vram[tile + 2 * py + 1];
+
+		/* shade numbers of pixels 0-3 and 4-7, one per byte */
+		uint32_t w[2] = {
+			__ccgb_spread[t1 >> 4] | (__ccgb_spread[t2 >> 4] << 1),
+			__ccgb_spread[t1 & 15] | (__ccgb_spread[t2 & 15] << 1),
+		};
+		uint8_t *sh = (uint8_t *)w;
+
+		if(!identity)
+		{
+			for(int i = 0; i < 8; i++)
+				sh[i] = pal[sh[i]];
+		}
+		w[0] |= layer;
+		w[1] |= layer;
+
+		if(x >= 0 && x <= LCD_WIDTH - 8)
+		{
+			memcpy(pixels + x, w, 8);
+		}
+		else
+		{
+			for(int i = 0; i < 8; i++)
+			{
+				if(x + i >= 0 && x + i < LCD_WIDTH)
+					pixels[x + i] = sh[i];
+			}
+		}
+	}
+}
+
 void __gb_draw_line(struct gb_s *gb)
 {
 	uint8_t pixels[160] = {0};
@@ -1492,80 +1558,16 @@ void __gb_draw_line(struct gb_s *gb)
 	/* If background is enabled, draw it. */
 	if(gb->hram_io[IO_LCDC] & LCDC_BG_ENABLE)
 	{
-		uint8_t bg_y, disp_x, bg_x, idx, py, px, t1, t2;
-		uint16_t bg_map, tile;
-
-		/* Calculate current background line to draw. Constant because
-		 * this function draws only this one line each time it is
-		 * called. */
-		bg_y = gb->hram_io[IO_LY] + gb->hram_io[IO_SCY];
-
-		/* Get selected background map address for first tile
-		 * corresponding to current line.
-		 * 0x20 (32) is the width of a background tile, and the bit
-		 * shift is to calculate the address. */
-		bg_map =
+		/* CCGB: was a per-pixel loop, see __ccgb_draw_tiles(). */
+		uint8_t bg_y = gb->hram_io[IO_LY] + gb->hram_io[IO_SCY];
+		uint16_t bg_map =
 			((gb->hram_io[IO_LCDC] & LCDC_BG_MAP) ?
 			 VRAM_BMAP_2 : VRAM_BMAP_1)
 			+ (bg_y >> 3) * 0x20;
+		uint8_t scx = gb->hram_io[IO_SCX];
 
-		/* The displays (what the player sees) X coordinate, drawn right
-		 * to left. */
-		disp_x = LCD_WIDTH - 1;
-
-		/* The X coordinate to begin drawing the background at. */
-		bg_x = disp_x + gb->hram_io[IO_SCX];
-
-		/* Get tile index for current background tile. */
-		idx = gb->vram[bg_map + (bg_x >> 3)];
-		/* Y coordinate of tile pixel to draw. */
-		py = (bg_y & 0x07);
-		/* X coordinate of tile pixel to draw. */
-		px = 7 - (bg_x & 0x07);
-
-		/* Select addressing mode. */
-		if(gb->hram_io[IO_LCDC] & LCDC_TILE_SELECT)
-			tile = VRAM_TILES_1 + idx * 0x10;
-		else
-			tile = VRAM_TILES_2 + ((idx + 0x80) % 0x100) * 0x10;
-
-		tile += 2 * py;
-
-		/* fetch first tile */
-		t1 = gb->vram[tile] >> px;
-		t2 = gb->vram[tile + 1] >> px;
-
-		for(; disp_x != 0xFF; disp_x--)
-		{
-			uint8_t c;
-
-			if(px == 8)
-			{
-				/* fetch next tile */
-				px = 0;
-				bg_x = disp_x + gb->hram_io[IO_SCX];
-				idx = gb->vram[bg_map + (bg_x >> 3)];
-
-				if(gb->hram_io[IO_LCDC] & LCDC_TILE_SELECT)
-					tile = VRAM_TILES_1 + idx * 0x10;
-				else
-					tile = VRAM_TILES_2 + ((idx + 0x80) % 0x100) * 0x10;
-
-				tile += 2 * py;
-				t1 = gb->vram[tile];
-				t2 = gb->vram[tile + 1];
-			}
-
-			/* copy background */
-			c = (t1 & 0x1) | ((t2 & 0x1) << 1);
-			pixels[disp_x] = gb->display.bg_palette[c];
-#if PEANUT_GB_12_COLOUR
-			pixels[disp_x] |= LCD_PALETTE_BG;
-#endif
-			t1 = t1 >> 1;
-			t2 = t2 >> 1;
-			px++;
-		}
+		__ccgb_draw_tiles(gb, pixels, bg_map, scx >> 3,
+				-(int)(scx & 0x07), bg_y & 0x07);
 	}
 
 	/* draw window */
@@ -1573,67 +1575,14 @@ void __gb_draw_line(struct gb_s *gb)
 			&& gb->hram_io[IO_LY] >= gb->display.WY
 			&& gb->hram_io[IO_WX] <= 166)
 	{
-		uint16_t win_line, tile;
-		uint8_t disp_x, win_x, py, px, idx, t1, t2, end;
-
-		/* Calculate Window Map Address. */
-		win_line = (gb->hram_io[IO_LCDC] & LCDC_WINDOW_MAP) ?
+		/* CCGB: was a per-pixel loop, see __ccgb_draw_tiles(). */
+		uint16_t win_line = (gb->hram_io[IO_LCDC] & LCDC_WINDOW_MAP) ?
 				    VRAM_BMAP_2 : VRAM_BMAP_1;
 		win_line += (gb->display.window_clear >> 3) * 0x20;
 
-		disp_x = LCD_WIDTH - 1;
-		win_x = disp_x - gb->hram_io[IO_WX] + 7;
-
-		// look up tile
-		py = gb->display.window_clear & 0x07;
-		px = 7 - (win_x & 0x07);
-		idx = gb->vram[win_line + (win_x >> 3)];
-
-		if(gb->hram_io[IO_LCDC] & LCDC_TILE_SELECT)
-			tile = VRAM_TILES_1 + idx * 0x10;
-		else
-			tile = VRAM_TILES_2 + ((idx + 0x80) % 0x100) * 0x10;
-
-		tile += 2 * py;
-
-		// fetch first tile
-		t1 = gb->vram[tile] >> px;
-		t2 = gb->vram[tile + 1] >> px;
-
-		// loop & copy window
-		end = (gb->hram_io[IO_WX] < 7 ? 0 : gb->hram_io[IO_WX] - 7) - 1;
-
-		for(; disp_x != end; disp_x--)
-		{
-			uint8_t c;
-
-			if(px == 8)
-			{
-				// fetch next tile
-				px = 0;
-				win_x = disp_x - gb->hram_io[IO_WX] + 7;
-				idx = gb->vram[win_line + (win_x >> 3)];
-
-				if(gb->hram_io[IO_LCDC] & LCDC_TILE_SELECT)
-					tile = VRAM_TILES_1 + idx * 0x10;
-				else
-					tile = VRAM_TILES_2 + ((idx + 0x80) % 0x100) * 0x10;
-
-				tile += 2 * py;
-				t1 = gb->vram[tile];
-				t2 = gb->vram[tile + 1];
-			}
-
-			// copy window
-			c = (t1 & 0x1) | ((t2 & 0x1) << 1);
-			pixels[disp_x] = gb->display.bg_palette[c];
-#if PEANUT_GB_12_COLOUR
-			pixels[disp_x] |= LCD_PALETTE_BG;
-#endif
-			t1 = t1 >> 1;
-			t2 = t2 >> 1;
-			px++;
-		}
+		__ccgb_draw_tiles(gb, pixels, win_line, 0,
+				(int)gb->hram_io[IO_WX] - 7,
+				gb->display.window_clear & 0x07);
 
 		gb->display.window_clear++; // advance window line
 	}

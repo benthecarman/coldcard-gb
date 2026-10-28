@@ -9,7 +9,7 @@ The emulator is [Peanut-GB](https://github.com/deltabeard/Peanut-GB) in C.
 | Path | What |
 |---|---|
 | `external/c-modules/gameboy/` | C module `_gameboy`: core, video, HALs, MicroPython bindings |
-| `external/c-modules/gameboy/peanut_gb.h` | Peanut-GB, vendored unmodified at `d0bcca77` (2026-09-21, v1.3.0) |
+| `external/c-modules/gameboy/peanut_gb.h` | Peanut-GB `d0bcca77` (2026-09-21, v1.3.0), with a faster background and window drawer; changes are marked `CCGB:` |
 | `shared/gameboy.py` | ROM picker, loading, saves, pause menu, settings |
 | `shared/manifest_q1.py` | one line: freezes `gameboy.py` into the Q firmware |
 | `shared/flow.py` | menu hooks (two `MenuItem` lines + a lazy-import wrapper) |
