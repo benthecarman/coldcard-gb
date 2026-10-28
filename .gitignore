@@ -34,3 +34,5 @@ pp
 *.sav.*
 *.state
 *.state.tmp
+# Game Boy firmware build output (gameboy/scripts/build-q1.sh)
+stm32/gameboy-q.dfu
