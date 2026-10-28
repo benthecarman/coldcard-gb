@@ -3,3 +3,5 @@
 roms/
 # test runner build output
 test/build/
+# bench output
+bench/build*

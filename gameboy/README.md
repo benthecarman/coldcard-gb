@@ -15,6 +15,7 @@ The emulator is [Peanut-GB](https://github.com/deltabeard/Peanut-GB) in C.
 | `shared/flow.py` | menu hooks (two `MenuItem` lines + a lazy-import wrapper) |
 | `unix/simulator.py` | numpy blit for raw pixel messages, and reads big display updates in full |
 | `gameboy/test/` | headless test runner (host gcc) |
+| `gameboy/bench/` | instruction counts on an emulated Cortex-M4 (QEMU) |
 | `gameboy/scripts/build-q1.sh` | builds and signs the Q firmware (`stm32/gameboy-q.dfu`), see `docs/install-q.md` |
 | `gameboy/scripts/build-sim.sh` | builds the simulator with the flags GCC 15 needs |
 | `gameboy/scripts/fetch-test-roms.sh` | downloads pinned, freely licensed test ROMs to `gameboy/roms/` |
@@ -37,6 +38,22 @@ Other runner commands:
 build/gbtest shot ROM FRAMES MODE OUT.png [grey|green]   # MODE: 1x 1.5x 1.5x-sharp 2x
 build/gbtest bench ROM FRAMES
 ```
+
+## Speed bench
+
+```
+cd gameboy/bench
+make run ROM=../roms/tobu.gb
+make profile
+```
+
+This runs the core bare-metal on QEMU's Cortex-M4 board with the firmware's
+compiler flags, and prints the instructions per frame (in thousands) for
+emulation and LCD work in each screen mode. The Q runs 2.0M cycles per
+frame (120 MHz at 59.7 fps), and each instruction takes about 1.3 to 2
+cycles, so 650K instructions per frame is roughly half the CPU. `profile`
+lists where the instructions go, by function and source line. Needs
+`qemu-system-arm` and `arm-none-eabi-gcc`.
 
 ## Simulator
 
