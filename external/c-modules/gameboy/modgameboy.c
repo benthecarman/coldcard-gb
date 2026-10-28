@@ -12,6 +12,9 @@
 //   while True: rv = emu.run() ...
 //   emu.close()
 //
+// Save states: state_header() + state_view() + cart_ram() written out, and
+// state_load() to restore.
+//
 #include <string.h>
 
 #include "py/obj.h"
@@ -321,6 +324,50 @@ STATIC mp_obj_t gb_stats(size_t n_args, const mp_obj_t *args)
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(gb_stats_obj, 1, 2, gb_stats);
 
+// state_header() -> bytes that start a save state file for this ROM/build
+STATIC mp_obj_t gb_state_header(mp_obj_t self_in)
+{
+    gb_obj_t *self = get_started(self_in);
+    uint8_t hdr[GB_STATE_HDR];
+
+    ccgb_state_header(self->core, hdr);
+
+    return mp_obj_new_bytes(hdr, sizeof(hdr));
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(gb_state_header_obj, gb_state_header);
+
+// state_view() -> read-only memoryview of the emulator state; a save state
+// is state_header() + this + cart_ram()
+STATIC mp_obj_t gb_state_view(mp_obj_t self_in)
+{
+    gb_obj_t *self = get_started(self_in);
+
+    return mp_obj_new_memoryview('B', sizeof(struct gb_s), &self->core->gb);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(gb_state_view_obj, gb_state_view);
+
+// state_load(state, ram): restore from the parts after the header; ram is
+// None if the game has no cart RAM
+STATIC mp_obj_t gb_state_load(mp_obj_t self_in, mp_obj_t state_in, mp_obj_t ram_in)
+{
+    gb_obj_t *self = get_started(self_in);
+    mp_buffer_info_t st, ram = { 0 };
+
+    mp_get_buffer_raise(state_in, &st, MP_BUFFER_READ);
+    if(ram_in != mp_const_none) {
+        mp_get_buffer_raise(ram_in, &ram, MP_BUFFER_READ);
+    }
+    if(st.len != sizeof(struct gb_s) || ram.len != self->cart_ram_size) {
+        mp_raise_ValueError(MP_ERROR_TEXT("state size"));
+    }
+
+    if(ram.len) memcpy(self->cart_ram, ram.buf, ram.len);
+    ccgb_state_load(self->core, st.buf);
+
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_3(gb_state_load_obj, gb_state_load);
+
 // error() -> None, or (code, address) of the first emulation error
 STATIC mp_obj_t gb_error_info(mp_obj_t self_in)
 {
@@ -364,6 +411,9 @@ STATIC const mp_rom_map_elem_t gb_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_video), MP_ROM_PTR(&gb_video_obj) },
     { MP_ROM_QSTR(MP_QSTR_run), MP_ROM_PTR(&gb_run_obj) },
     { MP_ROM_QSTR(MP_QSTR_stats), MP_ROM_PTR(&gb_stats_obj) },
+    { MP_ROM_QSTR(MP_QSTR_state_header), MP_ROM_PTR(&gb_state_header_obj) },
+    { MP_ROM_QSTR(MP_QSTR_state_view), MP_ROM_PTR(&gb_state_view_obj) },
+    { MP_ROM_QSTR(MP_QSTR_state_load), MP_ROM_PTR(&gb_state_load_obj) },
     { MP_ROM_QSTR(MP_QSTR_error), MP_ROM_PTR(&gb_error_info_obj) },
     { MP_ROM_QSTR(MP_QSTR_close), MP_ROM_PTR(&gb_close_obj) },
 };
@@ -376,6 +426,13 @@ const mp_obj_type_t gb_emulator_type = {
     .locals_dict = (void *)&gb_locals_dict,
 };
 
+// keys() -> bit mask of Q keys held now, bit N for key number N
+STATIC mp_obj_t gb_keys(void)
+{
+    return mp_obj_new_int_from_ull(hal_keys());
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_0(gb_keys_obj, gb_keys);
+
 #ifdef GB_HAL_UNIX
 extern const mp_obj_fun_builtin_fixed_t gb_sim_setup_obj;
 #endif
@@ -383,6 +440,7 @@ extern const mp_obj_fun_builtin_fixed_t gb_sim_setup_obj;
 STATIC const mp_rom_map_elem_t mp_module_gameboy_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR___name__), MP_ROM_QSTR(MP_QSTR__gameboy) },
     { MP_ROM_QSTR(MP_QSTR_Emulator), MP_ROM_PTR(&gb_emulator_type) },
+    { MP_ROM_QSTR(MP_QSTR_keys), MP_ROM_PTR(&gb_keys_obj) },
 #ifdef GB_HAL_UNIX
     { MP_ROM_QSTR(MP_QSTR_sim_setup), MP_ROM_PTR(&gb_sim_setup_obj) },
 #endif

@@ -131,3 +131,15 @@ int ccgb_run(ccgb_t *c, uint32_t max_frames, bool redraw);
 
 // ROM title from the cartridge header (17 bytes incl. NUL)
 void ccgb_title(ccgb_t *c, char title[17]);
+
+// Save states: the emulator state (struct gb_s) plus cart RAM. A state
+// file starts with a header (GB_STATE_HDR bytes) that names the ROM and
+// this build's state layout; a state loads only if its header matches.
+// The layout differs between builds for different CPUs.
+#define GB_STATE_HDR        36
+
+void ccgb_state_header(ccgb_t *c, uint8_t hdr[GB_STATE_HDR]);
+
+// Load emulator state saved from &c->gb (sizeof(struct gb_s) bytes). The
+// cart RAM is the caller's to restore; it is marked as needing a save.
+void ccgb_state_load(ccgb_t *c, const uint8_t *state);

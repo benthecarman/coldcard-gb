@@ -26,6 +26,9 @@
 #define SAVE_AFTER_IDLE     120
 #define SAVE_AT_MOST        600
 
+// cur_bank when no bank is selected yet
+#define NO_BANK             0xffff
+
 static uint8_t *bank_mem(ccgb_t *c, uint16_t bank)
 {
     if(!c->n_slots) {
@@ -155,7 +158,7 @@ ccgb_init(ccgb_t *c, const uint8_t *rom, uint32_t rom_size,
         c->slot_bank[i] = 0;        // bank 0 is never looked up here: empty
         c->slot_used[i] = 0;
     }
-    c->cur_bank = 0;
+    c->cur_bank = NO_BANK;
     c->cur_mem = NULL;
 
     int rv = gb_init(&c->gb, rom_read, cart_ram_read, cart_ram_write, gb_error, c);
@@ -210,6 +213,65 @@ ccgb_set_video(ccgb_t *c, int mode, const uint32_t rgb[4], uint32_t border)
 ccgb_title(ccgb_t *c, char title[17])
 {
     gb_get_rom_name(&c->gb, title);
+}
+
+    void
+ccgb_state_header(ccgb_t *c, uint8_t hdr[GB_STATE_HDR])
+{
+    static const char magic[8] = "CCGBST01";
+    uint32_t state_size = sizeof(struct gb_s);
+
+    memcpy(hdr, magic, 8);
+    memcpy(hdr + 8, &state_size, 4);
+    memcpy(hdr + 12, &c->cart_ram_size, 4);
+
+    // cartridge header: title (0x134..0x143), then header and global
+    // checksums (0x14d..0x14f), plus a pad byte
+    memcpy(hdr + 16, c->bank0 + 0x134, 16);
+    memcpy(hdr + 32, c->bank0 + 0x14d, 3);
+    hdr[35] = 0;
+}
+
+    void
+ccgb_state_load(ccgb_t *c, const uint8_t *state)
+{
+    struct gb_s *gb = &c->gb;
+
+    // keep this run's pointers: the saved ones may be from another boot
+    // (only these fields; all of gb_s is too big for the stack)
+    typeof(gb->gb_rom_read) rom_read = gb->gb_rom_read;
+    typeof(gb->gb_cart_ram_read) ram_read = gb->gb_cart_ram_read;
+    typeof(gb->gb_cart_ram_write) ram_write = gb->gb_cart_ram_write;
+    typeof(gb->gb_error) error = gb->gb_error;
+    typeof(gb->gb_serial_tx) serial_tx = gb->gb_serial_tx;
+    typeof(gb->gb_serial_rx) serial_rx = gb->gb_serial_rx;
+    typeof(gb->gb_bootrom_read) bootrom_read = gb->gb_bootrom_read;
+    typeof(gb->display.lcd_draw_line) draw_line = gb->display.lcd_draw_line;
+    void *priv = gb->direct.priv;
+    uint8_t joypad = gb->direct.joypad;
+
+    memcpy(gb, state, sizeof(*gb));
+
+    gb->gb_rom_read = rom_read;
+    gb->gb_cart_ram_read = ram_read;
+    gb->gb_cart_ram_write = ram_write;
+    gb->gb_error = error;
+    gb->gb_serial_tx = serial_tx;
+    gb->gb_serial_rx = serial_rx;
+    gb->gb_bootrom_read = bootrom_read;
+    gb->display.lcd_draw_line = draw_line;
+    gb->direct.priv = priv;
+    gb->direct.joypad = joypad;
+
+    c->cur_bank = NO_BANK;
+    c->cur_mem = NULL;
+    c->error = 0;
+    c->full_redraw = true;
+
+    if(c->cart_ram_size) {
+        c->ram_dirty = true;
+        c->ram_first_write = c->ram_last_write = c->stats.frames;
+    }
 }
 
 static inline uint64_t key_bit(uint8_t kn)
