@@ -1,0 +1,226 @@
+//
+// gbtest.c - headless runner for the COLDCARD Q Game Boy core.
+//
+// Builds the same gb_core.c / gb_video.c as the firmware, with hal_test.c
+// standing in for the hardware. Commands:
+//
+//   gbtest [-s SLOTS] serial ROM MAX_FRAMES
+//       Run until the serial port shows "Passed" or "Failed" (Blargg's
+//       test ROMs). Exit status 0 only on "Passed".
+//
+//   gbtest [-s SLOTS] shot ROM FRAMES MODE OUT.png [grey|green]
+//       Run FRAMES frames and save the 320x240 LCD as a PNG.
+//       MODE: 1x, 1.5x, 1.5x-sharp, 2x
+//
+//   gbtest [-s SLOTS] bench ROM FRAMES
+//       Run FRAMES frames as fast as possible; print host speed and
+//       bank cache stats.
+//
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <zlib.h>
+
+#include "gb_core.h"
+#include "hal_test.h"
+
+static const uint32_t PAL_GREY[4] = { 0xffffff, 0xaaaaaa, 0x555555, 0x000000 };
+static const uint32_t PAL_GREEN[4] = { 0xe0f8d0, 0x88c070, 0x346856, 0x081820 };
+
+void test_fail(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    fprintf(stderr, "FAIL: ");
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+    va_end(ap);
+    exit(1);
+}
+
+static ccgb_t *load(const char *path, int n_slots)
+{
+    FILE *f = fopen(path, "rb");
+    if(!f) test_fail("can't open %s", path);
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    // ROM area is whole 16K banks, padded with 0xff
+    uint32_t padded = (size + GB_BANK_SIZE - 1) & ~(GB_BANK_SIZE - 1);
+    uint8_t *rom = hal_rom_alloc(padded);
+    uint8_t *tmp = malloc(padded);
+    memset(tmp, 0xff, padded);
+    if(fread(tmp, 1, size, f) != (size_t)size) test_fail("short read");
+    fclose(f);
+    hal_rom_write(rom, tmp, padded);
+    free(tmp);
+
+    ccgb_t *c = calloc(1, sizeof(ccgb_t));
+    uint8_t *bank0 = malloc(GB_BANK_SIZE);
+    uint8_t *slots[GB_MAX_SLOTS];
+    for(int i = 0; i < n_slots; i++) slots[i] = malloc(GB_BANK_SIZE);
+
+    int rv = ccgb_init(c, rom, padded, bank0, slots, n_slots);
+    if(rv) test_fail("ccgb_init: %d", rv);
+
+    uint32_t ram = ccgb_cart_ram_size(c);
+    if(ram) {
+        uint8_t *mem = malloc(ram);
+        memset(mem, 0xff, ram);
+        ccgb_set_cart_ram(c, mem, ram);
+    }
+
+    // default Q keymap; no keys are pressed in these tests
+    uint8_t km[GB_KEYMAP_BYTES];
+    memset(km, GB_NO_KEY, sizeof(km));
+    km[GB_KEYMAP_BYTES - 2] = 7;        // menu = CANCEL
+    ccgb_set_keymap(c, km);
+
+    return c;
+}
+
+static int parse_mode(const char *s)
+{
+    if(!strcmp(s, "1x")) return VIDEO_1X;
+    if(!strcmp(s, "1.5x")) return VIDEO_15_SMOOTH;
+    if(!strcmp(s, "1.5x-sharp")) return VIDEO_15_SHARP;
+    if(!strcmp(s, "2x")) return VIDEO_2X_CROP;
+    test_fail("unknown mode %s", s);
+}
+
+// Run frames, stopping only for errors; saves just get acknowledged.
+static void run_frames(ccgb_t *c, uint32_t frames)
+{
+    uint32_t start = c->stats.frames;
+    bool redraw = true;
+
+    while(c->stats.frames - start < frames) {
+        int rv = ccgb_run(c, frames - (c->stats.frames - start), redraw);
+        redraw = false;
+        if(rv == GB_RUN_ERROR) {
+            test_fail("emulation error %d at 0x%04x", c->error - 1, c->error_addr);
+        }
+        if(rv == GB_RUN_SAVE) ccgb_saved(c);
+    }
+}
+
+static void put32(uint8_t *p, uint32_t v)
+{
+    p[0] = v >> 24; p[1] = v >> 16; p[2] = v >> 8; p[3] = v;
+}
+
+static void png_chunk(FILE *f, const char *type, const uint8_t *data, uint32_t len)
+{
+    uint8_t hdr[8];
+    put32(hdr, len);
+    memcpy(hdr + 4, type, 4);
+    fwrite(hdr, 1, 8, f);
+    if(len) fwrite(data, 1, len, f);
+
+    uint32_t crc = crc32(0, hdr + 4, 4);
+    if(len) crc = crc32(crc, data, len);   // crc32(crc, NULL, 0) returns 0
+    uint8_t tail[4];
+    put32(tail, crc);
+    fwrite(tail, 1, 4, f);
+}
+
+static void save_png(const char *path)
+{
+    const int w = HAL_LCD_W, h = HAL_LCD_H;
+    uLong raw_len = h * (1 + w * 3);
+    uint8_t *raw = malloc(raw_len), *p = raw;
+
+    for(int y = 0; y < h; y++) {
+        *p++ = 0;       // filter: none
+        for(int x = 0; x < w; x++) {
+            uint16_t px = test_screen[y][x];
+            uint8_t r = (px >> 11) & 0x1f, g = (px >> 5) & 0x3f, b = px & 0x1f;
+            *p++ = (r << 3) | (r >> 2);
+            *p++ = (g << 2) | (g >> 4);
+            *p++ = (b << 3) | (b >> 2);
+        }
+    }
+
+    uLong zlen = compressBound(raw_len);
+    uint8_t *z = malloc(zlen);
+    if(compress(z, &zlen, raw, raw_len) != Z_OK) test_fail("compress");
+
+    FILE *f = fopen(path, "wb");
+    if(!f) test_fail("can't write %s", path);
+    fwrite("\x89PNG\r\n\x1a\n", 1, 8, f);
+    uint8_t ihdr[13];
+    put32(ihdr, w);
+    put32(ihdr + 4, h);
+    ihdr[8] = 8; ihdr[9] = 2; ihdr[10] = ihdr[11] = ihdr[12] = 0;   // 8-bit RGB
+    png_chunk(f, "IHDR", ihdr, 13);
+    png_chunk(f, "IDAT", z, zlen);
+    png_chunk(f, "IEND", NULL, 0);
+    fclose(f);
+
+    free(raw);
+    free(z);
+}
+
+static void usage(void)
+{
+    fprintf(stderr, "usage: gbtest [-s SLOTS] serial ROM MAX_FRAMES\n"
+                    "       gbtest [-s SLOTS] shot ROM FRAMES MODE OUT.png [grey|green]\n"
+                    "       gbtest [-s SLOTS] bench ROM FRAMES\n");
+    exit(2);
+}
+
+int main(int argc, char **argv)
+{
+    int n_slots = 6;
+
+    if(argc > 2 && !strcmp(argv[1], "-s")) {
+        n_slots = atoi(argv[2]);
+        argv += 2;
+        argc -= 2;
+    }
+    if(argc < 4) usage();
+
+    const char *cmd = argv[1];
+    ccgb_t *c = load(argv[2], n_slots);
+    uint32_t frames = strtoul(argv[3], NULL, 0);
+
+    if(!strcmp(cmd, "serial")) {
+        ccgb_set_video(c, VIDEO_1X, PAL_GREY, 0);
+        for(uint32_t f = 0; f < frames; f += 60) {
+            run_frames(c, 60);
+            if(strstr(c->serial, "Passed") || strstr(c->serial, "Failed")) break;
+        }
+        printf("%s\n", c->serial);
+        printf("frames: %u\n", c->stats.frames);
+        return strstr(c->serial, "Passed") && !strstr(c->serial, "Failed") ? 0 : 1;
+    }
+
+    if(!strcmp(cmd, "shot")) {
+        if(argc < 6) usage();
+        const uint32_t *pal = (argc > 6 && !strcmp(argv[6], "green")) ? PAL_GREEN : PAL_GREY;
+        ccgb_set_video(c, parse_mode(argv[4]), pal, 0x202020);
+        run_frames(c, frames);
+        save_png(argv[5]);
+        printf("frames: %u shown: %u groups sent: %u\n",
+               c->stats.frames, c->stats.shown, c->stats.lines_sent);
+        return 0;
+    }
+
+    if(!strcmp(cmd, "bench")) {
+        ccgb_set_video(c, VIDEO_15_SMOOTH, PAL_GREEN, 0x202020);
+        struct timespec t0, t1;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        run_frames(c, frames);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        double secs = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+        printf("%u frames in %.3f s: %.0f fps on this host\n", frames, secs, frames / secs);
+        printf("groups sent: %u, cache hits: %u, misses: %u\n",
+               c->stats.lines_sent, c->stats.cache_hits, c->stats.cache_misses);
+        return 0;
+    }
+
+    usage();
+}
