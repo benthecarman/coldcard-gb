@@ -10,13 +10,15 @@ The emulator is [Peanut-GB](https://github.com/deltabeard/Peanut-GB) in C.
 |---|---|
 | `external/c-modules/gameboy/` | C module `_gameboy`: core, video, HALs, MicroPython bindings |
 | `external/c-modules/gameboy/peanut_gb.h` | Peanut-GB, vendored unmodified at `d0bcca77` (2026-09-21, v1.3.0) |
-| `shared/gameboy.py` | ROM picker, loading, pause menu |
+| `shared/gameboy.py` | ROM picker, loading, saves, pause menu, settings |
+| `shared/manifest_q1.py` | one line: freezes `gameboy.py` into the Q firmware |
 | `shared/flow.py` | menu hooks (two `MenuItem` lines + a lazy-import wrapper) |
 | `unix/simulator.py` | numpy blit for raw pixel messages, and reads big display updates in full |
 | `gameboy/test/` | headless test runner (host gcc) |
+| `gameboy/scripts/build-q1.sh` | builds and signs the Q firmware (`stm32/gameboy-q.dfu`), see `docs/install-q.md` |
 | `gameboy/scripts/build-sim.sh` | builds the simulator with the flags GCC 15 needs |
 | `gameboy/scripts/fetch-test-roms.sh` | downloads pinned, freely licensed test ROMs to `gameboy/roms/` |
-| `gameboy/docs/` | phase reports |
+| `gameboy/docs/` | design notes and install guide |
 
 ## Tests
 
