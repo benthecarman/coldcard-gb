@@ -218,10 +218,9 @@ ccgb_title(ccgb_t *c, char title[17])
     void
 ccgb_state_header(ccgb_t *c, uint8_t hdr[GB_STATE_HDR])
 {
-    static const char magic[8] = "CCGBST01";
     uint32_t state_size = sizeof(struct gb_s);
 
-    memcpy(hdr, magic, 8);
+    memcpy(hdr, "CCGBST01", 8);
     memcpy(hdr + 8, &state_size, 4);
     memcpy(hdr + 12, &c->cart_ram_size, 4);
 
