@@ -1,8 +1,5 @@
-# Downloaded test ROMs and any ROMs or saves dropped in for testing.
-# Never commit commercial ROMs or their saves.
+# Downloaded test ROMs (ROM and save files are ignored everywhere, see
+# the root .gitignore)
 roms/
-*.gb
-*.gbc
-*.sav
 # test runner build output
 test/build/

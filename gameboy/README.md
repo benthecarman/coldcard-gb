@@ -56,4 +56,4 @@ simulator on Xvfb with the console in `/tmp/gb-sim/console.log`. Use
 The firmware is MIT plus the Commons Clause (see `LICENSE`): it may be shared
 but not sold. Peanut-GB is MIT, with parts from SameBoy (MIT). Test ROMs are
 downloaded, not committed. Never commit commercial ROMs or their saves
-(`gameboy/.gitignore` blocks `*.gb`, `*.gbc`, `*.sav`).
+(the root `.gitignore` blocks `*.gb`, `*.gbc`, `*.sav` and states everywhere).
