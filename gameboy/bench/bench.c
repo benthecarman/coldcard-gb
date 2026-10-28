@@ -207,9 +207,8 @@ static const struct { int mode; const char *name; } MODES[] = {
     { VIDEO_15_SMOOTH, "1.5x-smooth" },
     { VIDEO_1X, "1x" },
     { VIDEO_2X_CROP, "2x-crop" },
-    { VIDEO_OLED_MIDDLE, "oled-middle" },
+    { VIDEO_OLED_FILL, "oled-fill" },
     { VIDEO_OLED_FIT, "oled-fit" },
-    { VIDEO_OLED_ZOOM, "oled-zoom" },
 };
 
 static void bench_mode(int mode, const char *name)

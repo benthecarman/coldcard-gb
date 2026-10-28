@@ -9,7 +9,7 @@
 // than this many of the four cells should be lit
 static const uint8_t BAYER2[4] = { 0, 2, 3, 1 };
 
-// 4x4 ordered dither for the averaged view: 17 levels
+// 4x4 ordered dither for Fit: 17 levels
 static const uint8_t BAYER4[4][4] = {
     {  0,  8,  2, 10 },
     { 12,  4, 14,  6 },
@@ -17,77 +17,34 @@ static const uint8_t BAYER4[4][4] = {
     { 15,  7, 13,  5 },
 };
 
-// Whole view: how far each pixel moves from the average brightness
-// towards the darkest it covers, in quarters
+// Fit: how far each pixel moves from the average brightness towards the
+// darkest it covers, in quarters
 #ifndef OLED_DARK_WEIGHT
 #define OLED_DARK_WEIGHT    3
 #endif
 
-// Window sizes, in GB pixels
-#define SCALED_LINES        80          // Top, Middle, Bottom: 160x80 at 4/5
-#define FIT_W               71          // Whole: 160x144 at 4/9
-
-// Work out which GB pixels each OLED pixel covers, from the mode and the
-// window position
-static void map(gb_oled_t *o)
-{
-    switch(o->mode) {
-        case VIDEO_OLED_FIT:
-            o->first = 0;
-            o->lines = GB_H;
-            o->dst_w = FIT_W;
-            break;
-        case VIDEO_OLED_ZOOM:
-            o->first = o->pan_y;
-            o->lines = OLED_H;
-            o->dst_w = OLED_W;
-            break;
-        default:
-            o->first = o->pan_y;
-            o->lines = SCALED_LINES;
-            o->dst_w = OLED_W;
-            break;
-    }
-    o->dst_x = (OLED_W - o->dst_w) / 2;
-
-    // each OLED row covers one or more whole GB lines, and each GB line
-    // goes to exactly one row; likewise for columns
-    for(int y = 0; y < OLED_H; y++) {
-        int a = o->first + y * o->lines / OLED_H;
-        int b = o->first + (y + 1) * o->lines / OLED_H;
-        o->row_a[y] = a;
-        o->row_n[y] = b - a;
-    }
-
-    const int src_w = (o->mode == VIDEO_OLED_ZOOM) ? OLED_W : GB_W;
-    for(int x = 0; x < o->dst_w; x++) {
-        o->col_a[x] = o->pan_x + x * src_w / o->dst_w;
-        o->col_b[x] = o->pan_x + (x + 1) * src_w / o->dst_w - 1;
-    }
-}
+#define FIT_W               71          // 160x144 at 4/9
 
     void
 gb_oled_setup(gb_oled_t *o, int mode, const uint32_t rgb[4])
 {
-    if(!VIDEO_IS_OLED(mode)) mode = VIDEO_OLED_MIDDLE;
+    if(!VIDEO_IS_OLED(mode)) mode = VIDEO_OLED_FILL;
     o->mode = mode;
-    o->average = (mode == VIDEO_OLED_FIT);
+    o->dst_w = (mode == VIDEO_OLED_FIT) ? FIT_W : OLED_W;
+    o->dst_x = (OLED_W - o->dst_w) / 2;
 
-    o->pan_x = o->pan_y = 0;
-    o->max_x = o->max_y = 0;
-    switch(mode) {
-        case VIDEO_OLED_ZOOM:
-            o->max_x = GB_W - OLED_W;
-            o->max_y = GB_H - OLED_H;
-            o->pan_x = o->max_x / 2;
-            o->pan_y = o->max_y / 2;
-            break;
-        case VIDEO_OLED_FIT:
-            break;
-        default:
-            o->max_y = GB_H - SCALED_LINES;
-            o->pan_y = (mode - VIDEO_OLED_TOP) * o->max_y / 2;
-            break;
+    // each OLED row covers 2 or 3 whole GB lines, and each GB line goes
+    // to exactly one row; likewise for columns (1 or 2 in Fill, 2 or 3 in
+    // Fit)
+    for(int y = 0; y < OLED_H; y++) {
+        int a = y * GB_H / OLED_H;
+        int b = (y + 1) * GB_H / OLED_H;
+        o->row_a[y] = a;
+        o->row_n[y] = b - a;
+    }
+    for(int x = 0; x < o->dst_w; x++) {
+        o->col_a[x] = x * GB_W / o->dst_w;
+        o->col_b[x] = (x + 1) * GB_W / o->dst_w - 1;
     }
 
     // shading: brightness of each shade, and how many of 4 cells it lights
@@ -111,24 +68,6 @@ gb_oled_setup(gb_oled_t *o, int mode, const uint32_t rgb[4])
                    | (o->lum[(b >> 4) & 3] << 16) | ((uint32_t)o->lum[b >> 6] << 24);
     }
 
-    map(o);
-}
-
-    bool
-gb_oled_pan(gb_oled_t *o, int dx, int dy)
-{
-    int x = o->pan_x + dx, y = o->pan_y + dy;
-    if(x < 0) x = 0;
-    if(x > o->max_x) x = o->max_x;
-    if(y < 0) y = 0;
-    if(y > o->max_y) y = o->max_y;
-
-    if(x == o->pan_x && y == o->pan_y) return false;
-
-    o->pan_x = x;
-    o->pan_y = y;
-    map(o);
-    return true;
 }
 
 // One GB line as a shade per pixel
@@ -143,7 +82,7 @@ static void unpack(const uint8_t *line, uint8_t out[GB_W])
     }
 }
 
-// Top, Middle, Bottom, Zoom: darkest shade of the pixels covered, dithered
+// Fill: darkest shade of the pixels covered, dithered
 static void render_darkest(const gb_oled_t *o, const uint8_t fb[GB_H][GB_LINE_BYTES],
                            uint8_t out[OLED_BYTES])
 {
@@ -173,7 +112,7 @@ static void render_darkest(const gb_oled_t *o, const uint8_t fb[GB_H][GB_LINE_BY
     }
 }
 
-// Whole: brightness averaged over the pixels covered, pulled towards the
+// Fit: brightness averaged over the pixels covered, pulled towards the
 // darkest of them, dithered. Columns are merged first, line by line, then
 // the lines of each row.
 static void render_average(const gb_oled_t *o, const uint8_t fb[GB_H][GB_LINE_BYTES],
@@ -237,7 +176,7 @@ gb_oled_render(const gb_oled_t *o, const uint8_t fb[GB_H][GB_LINE_BYTES],
 {
     memset(out, 0, OLED_BYTES);
 
-    if(o->average) {
+    if(o->mode == VIDEO_OLED_FIT) {
         render_average(o, fb, out);
     } else {
         render_darkest(o, fb, out);

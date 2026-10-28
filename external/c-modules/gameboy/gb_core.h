@@ -44,18 +44,15 @@ enum {
 #define GB_KEYS_PER_BTN     2
 #define GB_NO_KEY           0xff
 
-// Key numbers (see hal_keys()) for each button, then the menu,
-// fast-forward and view keys. Unused entries are GB_NO_KEY. A tap of the
-// view key steps through the OLED views; held with the D-pad, it moves the
-// view.
+// Key numbers (see hal_keys()) for each button, then the menu and
+// fast-forward keys. Unused entries are GB_NO_KEY.
 typedef struct {
     uint8_t btn[GB_NUM_BTN][GB_KEYS_PER_BTN];
     uint8_t menu;
     uint8_t fast;
-    uint8_t view;
 } gb_keymap_t;
 
-#define GB_KEYMAP_BYTES     (GB_NUM_BTN * GB_KEYS_PER_BTN + 3)
+#define GB_KEYMAP_BYTES     (GB_NUM_BTN * GB_KEYS_PER_BTN + 2)
 
 typedef struct {
     uint32_t frames;            // emulated
@@ -95,7 +92,6 @@ typedef struct ccgb_s {
     bool line_dirty[GB_H];
     bool full_redraw;
     int video_mode;             // VIDEO_* from gb_video.h or gb_oled.h
-    uint32_t palette[4];
     gb_video_t video;           // LCD modes
     uint16_t out_buf[2][4 * VIDEO_MAX_GROUP_PX];
     int out_next;               // which out_buf to fill next
@@ -104,8 +100,6 @@ typedef struct ccgb_s {
 
     gb_keymap_t keymap;
     uint64_t last_keys;
-    bool viewing;               // view key pressed alone, still held
-    bool view_tap;              //   and nothing else pressed since
 
     // pacing, in nanoseconds of the monotonic clock
     uint64_t deadline_ns;
@@ -133,9 +127,6 @@ void ccgb_set_cart_ram(ccgb_t *c, uint8_t *ram, uint32_t size);
 
 void ccgb_set_keymap(ccgb_t *c, const uint8_t map[GB_KEYMAP_BYTES]);
 void ccgb_set_video(ccgb_t *c, int mode, const uint32_t rgb[4], uint32_t border);
-
-// Current video mode: the view key changes it while a game runs.
-int ccgb_video_mode(ccgb_t *c);
 
 // Cart RAM was written out: clear the dirty flag.
 void ccgb_saved(ccgb_t *c);

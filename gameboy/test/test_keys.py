@@ -17,9 +17,8 @@ def stub(name, **attrs):
     m.__dict__.update(attrs)
     sys.modules[name] = m
 
-stub('_gameboy', NO_KEY=0xff, KEYMAP_BYTES=19, VIDEO_1X=0, VIDEO_15_SMOOTH=1,
-     VIDEO_15_SHARP=2, VIDEO_2X_CROP=3, VIDEO_OLED_TOP=16, VIDEO_OLED_MIDDLE=17,
-     VIDEO_OLED_BOTTOM=18, VIDEO_OLED_FIT=19, VIDEO_OLED_ZOOM=20)
+stub('_gameboy', NO_KEY=0xff, KEYMAP_BYTES=18, VIDEO_1X=0, VIDEO_15_SMOOTH=1,
+     VIDEO_15_SHARP=2, VIDEO_2X_CROP=3, VIDEO_OLED_FILL=16, VIDEO_OLED_FIT=17)
 stub('glob', dis=None, settings=None)
 stub('ux', ux_show_story=None, the_ux=None)
 stub('menu', MenuSystem=None, MenuItem=None)
@@ -69,7 +68,6 @@ gb = load(False)
 mk = gb.MK4_KEYS.index
 check(gb.ghosts([mk('6'), mk('3'), mk('2')]) == {mk('5')}, 'mk4 basic ghost')
 check(gb.keymap_ok(gb.DEFAULT_KEYMAP), 'mk4 default keymap valid')
-check(len(gb.DEFAULT_KEYMAP) == 19 and gb.DEFAULT_KEYMAP[gb.POS_VIEW] == mk('2'), 'mk4 view key')
 
 # D-pad on the arrow keys
 dpad = [gb.DEFAULT_KEYMAP[2 * f] for f in range(4, 8)]
@@ -81,15 +79,19 @@ check(len(problems) == 8 and
       all(p.startswith(('Up+Right+A', 'Down+Right+A')) for p in problems),
       'mk4 default keymap: %r' % problems)
 
-# settings with the old default get the new one; others are kept
+# settings from the build with a view key (19-byte keymaps, five views)
+# go back to the default controls and screen; the shades stay
 saved = {}
 gb.settings = types.SimpleNamespace(get=lambda k: saved.get(k))
-saved['gb'] = dict(v=1, p=0, k=list(gb.OLD_DEFAULT_KEYMAPS[0]))
-check(bytes(gb.Config().keymap) == gb.DEFAULT_KEYMAP, 'mk4 old default keymap not replaced')
+saved['gb'] = dict(v=1, p=1, k=[mk('6'), 0xff] * 8 + [mk('x'), mk('0'), mk('2')])
+cfg = gb.Config()
+check(bytes(cfg.keymap) == gb.DEFAULT_KEYMAP and cfg.video == 0 and cfg.palette == 1,
+      'mk4 settings from the view key build')
 mine = bytearray(gb.DEFAULT_KEYMAP)
 mine[0] = mk('y')
 saved['gb'] = dict(v=1, p=0, k=list(mine))
-check(gb.Config().keymap == mine, 'mk4 own keymap not kept')
+cfg = gb.Config()
+check(cfg.keymap == mine and cfg.video == 1, 'mk4 own settings not kept')
 
 names = [gb.key_name(k) for k in (mk('y'), mk('x'), mk('5'), 0xff)]
 check(names == ['OK', 'X', '5', 'none'], repr(names))

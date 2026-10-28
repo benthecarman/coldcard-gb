@@ -8,7 +8,7 @@
 //   emu.rom_write(offset, chunk) ...      # whole ROM
 //   title, ram_size, slots = emu.start(6)
 //   emu.cart_ram()[:] = saved_data        # memoryview
-//   emu.keymap(bytes(19)); emu.video(mode, (c0, c1, c2, c3), border)
+//   emu.keymap(bytes(18)); emu.video(mode, (c0, c1, c2, c3), border)
 //   while True: rv = emu.run() ...
 //   emu.close()
 //
@@ -234,8 +234,7 @@ STATIC mp_obj_t gb_saved(mp_obj_t self_in)
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(gb_saved_obj, gb_saved);
 
 // keymap(map): bytes of key numbers, 2 per button (A B SELECT START
-// RIGHT LEFT UP DOWN), then the menu, fast-forward and view keys;
-// 0xff = none
+// RIGHT LEFT UP DOWN), then the menu and fast-forward keys; 0xff = none
 STATIC mp_obj_t gb_keymap(mp_obj_t self_in, mp_obj_t map_in)
 {
     gb_obj_t *self = get_started(self_in);
@@ -274,15 +273,6 @@ STATIC mp_obj_t gb_video(size_t n_args, const mp_obj_t *args)
     return mp_const_none;
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(gb_video_obj, 4, 4, gb_video);
-
-// video_mode() -> current mode (the view key changes it during run())
-STATIC mp_obj_t gb_video_mode(mp_obj_t self_in)
-{
-    gb_obj_t *self = get_started(self_in);
-
-    return MP_OBJ_NEW_SMALL_INT(ccgb_video_mode(self->core));
-}
-STATIC MP_DEFINE_CONST_FUN_OBJ_1(gb_video_mode_obj, gb_video_mode);
 
 // run(max_frames=0, redraw=False) -> RUN_* code
 STATIC mp_obj_t gb_run(size_t n_args, const mp_obj_t *pos_args, mp_map_t *kw_args)
@@ -419,7 +409,6 @@ STATIC const mp_rom_map_elem_t gb_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_saved), MP_ROM_PTR(&gb_saved_obj) },
     { MP_ROM_QSTR(MP_QSTR_keymap), MP_ROM_PTR(&gb_keymap_obj) },
     { MP_ROM_QSTR(MP_QSTR_video), MP_ROM_PTR(&gb_video_obj) },
-    { MP_ROM_QSTR(MP_QSTR_video_mode), MP_ROM_PTR(&gb_video_mode_obj) },
     { MP_ROM_QSTR(MP_QSTR_run), MP_ROM_PTR(&gb_run_obj) },
     { MP_ROM_QSTR(MP_QSTR_stats), MP_ROM_PTR(&gb_stats_obj) },
     { MP_ROM_QSTR(MP_QSTR_state_header), MP_ROM_PTR(&gb_state_header_obj) },
@@ -467,11 +456,8 @@ STATIC const mp_rom_map_elem_t mp_module_gameboy_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_VIDEO_15_SMOOTH), MP_ROM_INT(VIDEO_15_SMOOTH) },
     { MP_ROM_QSTR(MP_QSTR_VIDEO_15_SHARP), MP_ROM_INT(VIDEO_15_SHARP) },
     { MP_ROM_QSTR(MP_QSTR_VIDEO_2X_CROP), MP_ROM_INT(VIDEO_2X_CROP) },
-    { MP_ROM_QSTR(MP_QSTR_VIDEO_OLED_TOP), MP_ROM_INT(VIDEO_OLED_TOP) },
-    { MP_ROM_QSTR(MP_QSTR_VIDEO_OLED_MIDDLE), MP_ROM_INT(VIDEO_OLED_MIDDLE) },
-    { MP_ROM_QSTR(MP_QSTR_VIDEO_OLED_BOTTOM), MP_ROM_INT(VIDEO_OLED_BOTTOM) },
+    { MP_ROM_QSTR(MP_QSTR_VIDEO_OLED_FILL), MP_ROM_INT(VIDEO_OLED_FILL) },
     { MP_ROM_QSTR(MP_QSTR_VIDEO_OLED_FIT), MP_ROM_INT(VIDEO_OLED_FIT) },
-    { MP_ROM_QSTR(MP_QSTR_VIDEO_OLED_ZOOM), MP_ROM_INT(VIDEO_OLED_ZOOM) },
 
     { MP_ROM_QSTR(MP_QSTR_NO_KEY), MP_ROM_INT(GB_NO_KEY) },
     { MP_ROM_QSTR(MP_QSTR_KEYMAP_BYTES), MP_ROM_INT(GB_KEYMAP_BYTES) },

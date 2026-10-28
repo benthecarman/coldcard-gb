@@ -14,8 +14,6 @@ const bool hal_lcd_big_endian = false;
 
 uint16_t test_screen[HAL_LCD_H][HAL_LCD_W];
 uint64_t test_keys;
-const uint64_t *test_key_seq;
-int test_key_len;
 int test_lcd_writes;
 
 static int win_x, win_y, win_w, win_h, win_pos;
@@ -72,13 +70,6 @@ void hal_oled_write(const uint8_t *buf)
 
 uint64_t hal_keys(void)
 {
-    if(test_key_seq && test_key_len) {
-        test_keys = *test_key_seq;
-        if(test_key_len > 1) {
-            test_key_seq++;
-            test_key_len--;
-        }
-    }
     return test_keys;
 }
 

@@ -44,16 +44,13 @@ KN_SPACE = const(52)
 NO = core.NO_KEY
 
 # Keymap: two keys per button, in this order: A B SELECT START RIGHT LEFT
-# UP DOWN, then the menu, fast-forward and view keys. The view key (Mk4
-# only) steps through the parts of the Game Boy screen the OLED shows.
+# UP DOWN, then the menu and fast-forward keys.
 BUTTONS = ('A', 'B', 'Select', 'Start', 'Right', 'Left', 'Up', 'Down')
 FUNC_MENU = const(8)
 FUNC_FAST = const(9)
-FUNC_VIEW = const(10)
 POS_MENU = const(16)
 POS_FAST = const(17)
-POS_VIEW = const(18)
-FUNC_POS = {FUNC_MENU: POS_MENU, FUNC_FAST: POS_FAST, FUNC_VIEW: POS_VIEW}
+FUNC_POS = {FUNC_MENU: POS_MENU, FUNC_FAST: POS_FAST}
 
 if not MK4:
     FUNCS = BUTTONS + ('Menu', 'Fast-forward')
@@ -69,9 +66,7 @@ if not MK4:
         KN_S, KN_DOWN,
         KN_CANCEL,
         KN_O,
-        NO,
     ])
-    OLD_DEFAULT_KEYMAPS = ()
 
     # key numbers are row * 10 + col of the keyboard matrix
     ROW_KEYS = 10
@@ -100,7 +95,7 @@ if not MK4:
     )
     SCREEN_NAME = 'LCD'
 else:
-    FUNCS = BUTTONS + ('Menu', 'Fast-forward', 'View')
+    FUNCS = BUTTONS + ('Menu', 'Fast-forward')
 
     # key numbers are positions in mempad.py's DECODER: row * 3 + col
     MK4_KEYS = 'y0x987654321'
@@ -120,14 +115,7 @@ else:
         mk('8'), NO,        # Down
         mk('x'),            # menu
         mk('0'),            # fast-forward
-        mk('2'),            # view
     ])
-
-    # earlier defaults: settings that still have one get the new one
-    OLD_DEFAULT_KEYMAPS = (
-        bytes([mk('y'), NO, mk('0'), NO, mk('1'), NO, mk('3'), NO, mk('6'), NO,
-               mk('4'), NO, mk('2'), NO, mk('8'), NO, mk('x'), mk('7'), mk('5')]),
-    )
     del mk
 
     ROW_KEYS = 3
@@ -137,15 +125,13 @@ else:
     OK_NAME, CANCEL_NAME = 'OK', 'X'
     KEYBOARD = 'The keypad'
 
-    VIDEO_LABEL = 'View'
+    # the whole Game Boy screen either way
+    VIDEO_LABEL = 'Screen'
     VIDEO_MODES = (
-        ('Top', core.VIDEO_OLED_TOP),
-        ('Middle', core.VIDEO_OLED_MIDDLE),
-        ('Bottom', core.VIDEO_OLED_BOTTOM),
-        ('Whole', core.VIDEO_OLED_FIT),
-        ('Zoom', core.VIDEO_OLED_ZOOM),
+        ('Fill', core.VIDEO_OLED_FILL),
+        ('Keep Shape', core.VIDEO_OLED_FIT),
     )
-    DEFAULT_VIDEO = 1
+    DEFAULT_VIDEO = 0
 
     # On the OLED a shade lights up as many pixels as its brightness says:
     # white and black are sharp, the greys come out dithered.
@@ -204,11 +190,11 @@ def ghosts(held):
 
 def ghost_problems(km):
     # Button combos people hold that would also press another game key.
-    # Returns lines of text; empty if none. The menu and view keys only
-    # count when held alone, so ghosts of them are harmless.
+    # Returns lines of text; empty if none. The menu key only
+    # counts when held alone, so ghosts of it are harmless.
     owner = {}
     for f in range(len(FUNCS)):
-        if f in (FUNC_MENU, FUNC_VIEW):
+        if f == FUNC_MENU:
             continue
         for k in func_keys(km, f):
             owner[k] = f
@@ -260,24 +246,15 @@ class Config:
         try:
             km = bytearray(d.get('k'))
             assert keymap_ok(km)
-            assert bytes(km) not in OLD_DEFAULT_KEYMAPS
         except:
+            # none yet, or from a build with other controls and screen
+            # modes: its screen choice meant something else too
             km = bytearray(DEFAULT_KEYMAP)
+            self.video = DEFAULT_VIDEO
         self.keymap = km
-        self.changed = False
 
     def save(self):
         settings.put(SETTINGS_KEY, dict(v=self.video, p=self.palette, k=list(self.keymap)))
-        self.changed = False
-
-    def follow(self, emu):
-        # The view key changes the video mode while the game runs. Keep
-        # it, so the menu shows it and it is saved with the settings.
-        mode = emu.video_mode()
-        for i, (_, m) in enumerate(VIDEO_MODES):
-            if m == mode and i != self.video:
-                self.video = i
-                self.changed = True
 
     def apply(self, emu):
         emu.keymap(bytes(self.keymap))
@@ -617,9 +594,6 @@ async def set_func_keys(cfg, f):
     if f == FUNC_FAST:
         line2 = 'Hold it to run the game fast. Press the menu key (%s) for none.' \
                     % key_name(menu_key)
-    elif f == FUNC_VIEW:
-        line2 = 'Tap it for another view; hold it with the D-pad to move the ' \
-                'view. Press the menu key (%s) for none.' % key_name(menu_key)
     else:
         line2 = None
     first = await capture_key('Press the key for %s' % name, line2)
@@ -637,7 +611,7 @@ async def set_func_keys(cfg, f):
     elif f == FUNC_MENU:
         pass        # menu: may take a key from a button, below
     elif first == menu_key:
-        new = []    # fast-forward or view: none
+        new = []    # fast-forward: none
 
     old = bytes(km)
 
@@ -695,8 +669,6 @@ async def pause_menu(game, cfg):
     emu = game.emu
     await keys_settle()
     await game.save_or_complain()
-    if cfg.changed:
-        cfg.save()          # view picked with the view key
 
     cursor = 0
     while True:
@@ -798,7 +770,6 @@ async def play(game, cfg):
         rv = emu.run(redraw=redraw)
         after_run()
         redraw = False
-        cfg.follow(emu)
 
         if rv == core.RUN_SAVE:
             # the game saved: write the .sav, then straight back in

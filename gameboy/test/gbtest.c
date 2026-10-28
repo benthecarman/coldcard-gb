@@ -10,8 +10,7 @@
 //
 //   gbtest [-s SLOTS] shot ROM FRAMES MODE OUT.png [grey|green]
 //       Run FRAMES frames and save the 320x240 LCD as a PNG.
-//       MODE: 1x, 1.5x, 1.5x-sharp, 2x, oled-top, oled-middle, oled-bottom,
-//       oled-fit, oled-zoom
+//       MODE: 1x, 1.5x, 1.5x-sharp, 2x, oled-fill, oled-fit
 //
 //   gbtest frame IN.pgm MODE OUT.png [PALETTE]
 //       Show a 160x144 greyscale PGM (white is shade 0) in an OLED mode,
@@ -19,9 +18,6 @@
 //
 //   gbtest oled
 //       Checks of the OLED renderer on made-up pictures.
-//
-//   gbtest view ROM 0
-//       Checks of the view key, running ROM.
 //
 //   gbtest [-s SLOTS] bench ROM FRAMES
 //       Run FRAMES frames as fast as possible; print host speed and
@@ -123,11 +119,8 @@ static int parse_mode(const char *s)
     if(!strcmp(s, "1.5x")) return VIDEO_15_SMOOTH;
     if(!strcmp(s, "1.5x-sharp")) return VIDEO_15_SHARP;
     if(!strcmp(s, "2x")) return VIDEO_2X_CROP;
-    if(!strcmp(s, "oled-top")) return VIDEO_OLED_TOP;
-    if(!strcmp(s, "oled-middle")) return VIDEO_OLED_MIDDLE;
-    if(!strcmp(s, "oled-bottom")) return VIDEO_OLED_BOTTOM;
+    if(!strcmp(s, "oled-fill")) return VIDEO_OLED_FILL;
     if(!strcmp(s, "oled-fit")) return VIDEO_OLED_FIT;
-    if(!strcmp(s, "oled-zoom")) return VIDEO_OLED_ZOOM;
     test_fail("unknown mode %s", s);
 }
 
@@ -239,7 +232,7 @@ static int oled_checks(void)
     const int all = OLED_W * OLED_H;
 
     // grey ramp: shades light up 4, 3, 1 and 0 of every 4 pixels
-    gb_oled_setup(&o, VIDEO_OLED_MIDDLE, PAL_GREY);
+    gb_oled_setup(&o, VIDEO_OLED_FILL, PAL_GREY);
     const int want[4] = { all, all * 3 / 4, all / 4, 0 };
     for(int s = 0; s < 4; s++) {
         fb_fill(fb, s);
@@ -248,97 +241,71 @@ static int oled_checks(void)
     }
 
     // two-tone and inverse
-    gb_oled_setup(&o, VIDEO_OLED_TOP, PAL_MONO);
+    gb_oled_setup(&o, VIDEO_OLED_FILL, PAL_MONO);
     fb_fill(fb, 1);
     gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
     if(oled_count(out) != all) test_fail("mono: light grey not lit");
-    gb_oled_setup(&o, VIDEO_OLED_TOP, PAL_INVERSE);
+    gb_oled_setup(&o, VIDEO_OLED_FILL, PAL_INVERSE);
     fb_fill(fb, 3);
     gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
     if(oled_count(out) != all) test_fail("inverse: black not lit");
 
-    // the windowed views keep a one-pixel dark line, in either direction,
-    // on every GB column and line they show
-    const int modes[4] = { VIDEO_OLED_TOP, VIDEO_OLED_MIDDLE, VIDEO_OLED_BOTTOM, VIDEO_OLED_ZOOM };
-    for(int m = 0; m < 4; m++) {
-        gb_oled_setup(&o, modes[m], PAL_MONO);
-        int cols = (modes[m] == VIDEO_OLED_ZOOM) ? OLED_W : GB_W;
-        for(int gx = o.pan_x; gx < o.pan_x + cols; gx++) {
-            fb_fill(fb, 0);
-            for(int y = 0; y < GB_H; y++) fb_set(fb, gx, y, 3);
-            gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
-            if(oled_count(out) != all - OLED_H) test_fail("mode %d: column %d", modes[m], gx);
-        }
-        for(int gy = o.first; gy < o.first + o.lines; gy++) {
-            fb_fill(fb, 0);
-            for(int x = 0; x < GB_W; x++) fb_set(fb, x, gy, 3);
-            gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
-            if(oled_count(out) != all - OLED_W) test_fail("mode %d: line %d", modes[m], gy);
-        }
+    // fill keeps a one-pixel dark line, in either direction, on every GB
+    // column and line
+    gb_oled_setup(&o, VIDEO_OLED_FILL, PAL_MONO);
+    for(int gx = 0; gx < GB_W; gx++) {
+        fb_fill(fb, 0);
+        for(int y = 0; y < GB_H; y++) fb_set(fb, gx, y, 3);
+        gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+        if(oled_count(out) != all - OLED_H) test_fail("fill: column %d", gx);
+    }
+    for(int gy = 0; gy < GB_H; gy++) {
+        fb_fill(fb, 0);
+        for(int x = 0; x < GB_W; x++) fb_set(fb, x, gy, 3);
+        gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+        if(oled_count(out) != all - OLED_W) test_fail("fill: line %d", gy);
     }
 
-    // the scaled views cover 80 lines: bottom is lines 64-143
-    gb_oled_setup(&o, VIDEO_OLED_BOTTOM, PAL_MONO);
+    // fill: the corners of the Game Boy screen are the OLED's corners
     fb_fill(fb, 0);
-    fb_set(fb, 0, 64, 3);
+    fb_set(fb, 0, 0, 3);
     fb_set(fb, 159, 143, 3);
     gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
     if(oled_lit(out, 0, 0) || oled_lit(out, 127, 63) || oled_count(out) != all - 2) {
-        test_fail("bottom view corners");
+        test_fail("fill corners");
     }
 
-    // moving the middle view down as far as it goes gives the bottom view
-    gb_oled_setup(&o, VIDEO_OLED_MIDDLE, PAL_MONO);
-    if(!gb_oled_pan(&o, 0, 1000) || o.first != 64 || gb_oled_pan(&o, 0, 1)) {
-        test_fail("middle view pan: first %d", o.first);
-    }
-    if(gb_oled_pan(&o, 1, 0)) test_fail("scaled views move sideways");
-
-    // zoom is 1:1 and moves both ways, within the screen
-    gb_oled_setup(&o, VIDEO_OLED_ZOOM, PAL_MONO);
-    gb_oled_pan(&o, -1000, -1000);
-    fb_fill(fb, 0);
-    fb_set(fb, 0, 0, 3);
-    fb_set(fb, 127, 63, 3);
-    fb_set(fb, 128, 64, 3);
-    gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
-    if(oled_lit(out, 0, 0) || oled_lit(out, 127, 63) || oled_count(out) != all - 2) {
-        test_fail("zoom corners");
-    }
-    gb_oled_pan(&o, 1000, 1000);
-    if(o.pan_x != GB_W - OLED_W || o.pan_y != GB_H - OLED_H) test_fail("zoom pan limits");
-
-    // whole: 71 columns in the middle; the sides stay dark
+    // fit: 71 columns in the middle; the sides stay dark
     gb_oled_setup(&o, VIDEO_OLED_FIT, PAL_GREY);
     const int fit = o.dst_w * OLED_H;
     fb_fill(fb, 0);
     gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
     if(o.dst_w != 71 || oled_count(out) != fit || oled_lit(out, o.dst_x - 1, 0)
        || oled_lit(out, o.dst_x + o.dst_w, 0)) {
-        test_fail("whole view: %d columns, %d lit", o.dst_w, oled_count(out));
+        test_fail("fit: %d columns, %d lit", o.dst_w, oled_count(out));
     }
 
-    // whole: shades get darker in order, and a one-pixel dark line
-    // anywhere darkens the picture
+    // fit: shades get darker in order, and a one-pixel dark line anywhere
+    // darkens the picture
     int last = fit + 1;
     for(int s = 0; s < 4; s++) {
         fb_fill(fb, s);
         gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
-        if(oled_count(out) >= last) test_fail("whole view: shade %d not darker", s);
+        if(oled_count(out) >= last) test_fail("fit: shade %d not darker", s);
         last = oled_count(out);
     }
-    if(last != 0) test_fail("whole view: black lit");
+    if(last != 0) test_fail("fit: black lit");
     for(int gx = 0; gx < GB_W; gx++) {
         fb_fill(fb, 0);
         for(int y = 0; y < GB_H; y++) fb_set(fb, gx, y, 3);
         gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
-        if(oled_count(out) >= fit) test_fail("whole view: column %d lost", gx);
+        if(oled_count(out) >= fit) test_fail("fit: column %d lost", gx);
     }
     for(int gy = 0; gy < GB_H; gy++) {
         fb_fill(fb, 0);
         for(int x = 0; x < GB_W; x++) fb_set(fb, x, gy, 3);
         gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
-        if(oled_count(out) >= fit) test_fail("whole view: line %d lost", gy);
+        if(oled_count(out) >= fit) test_fail("fit: line %d lost", gy);
     }
 
     printf("oled checks passed\n");
@@ -375,75 +342,13 @@ static int show_frame(const char *in, int mode, const char *out_png, const uint3
     return 0;
 }
 
-// One ccgb_run() with keys changing each frame: keys[0] is what is held
-// when it starts
-static void play_keys(ccgb_t *c, const uint64_t *keys, int n)
-{
-    test_key_seq = keys;
-    test_key_len = n;
-    run_frames(c, n - 1);
-    test_key_seq = NULL;
-}
-
-// View key: a tap steps to the next view, held with the D-pad it moves
-// the view, and a ghost of it (pressed with other keys) does nothing.
-static int view_checks(ccgb_t *c)
-{
-    enum { K_A = 20, K_UP, K_DOWN, K_VIEW };
-    uint8_t km[GB_KEYMAP_BYTES];
-    memset(km, GB_NO_KEY, sizeof(km));
-    km[offsetof(gb_keymap_t, btn[GB_BTN_A][0])] = K_A;
-    km[offsetof(gb_keymap_t, btn[GB_BTN_UP][0])] = K_UP;
-    km[offsetof(gb_keymap_t, btn[GB_BTN_DOWN][0])] = K_DOWN;
-    km[offsetof(gb_keymap_t, menu)] = 7;
-    km[offsetof(gb_keymap_t, view)] = K_VIEW;
-    ccgb_set_keymap(c, km);
-    ccgb_set_video(c, VIDEO_OLED_MIDDLE, PAL_MONO, 0);
-    run_frames(c, 2);
-
-    const uint64_t view = 1ULL << K_VIEW, down = 1ULL << K_DOWN, a = 1ULL << K_A;
-
-    // tap; while the view key is held the game sees no keys
-    const uint64_t tap[] = { 0, view, view, view };
-    play_keys(c, tap, 4);
-    if(c->gb.direct.joypad != 0xff) test_fail("view key held: game sees keys");
-    ccgb_set_video(c, VIDEO_OLED_MIDDLE, PAL_MONO, 0);
-    const uint64_t tap_up[] = { 0, view, view, 0 };
-    play_keys(c, tap_up, 4);
-    if(ccgb_video_mode(c) != VIDEO_OLED_BOTTOM) test_fail("tap: mode %d", ccgb_video_mode(c));
-
-    // hold and move: no view change on letting go, and Down held after
-    // it stays away from the game
-    ccgb_set_video(c, VIDEO_OLED_MIDDLE, PAL_MONO, 0);
-    const uint64_t pan[] = { 0, view, view | down, view | down, view | down, view | down,
-                             view | down, down, down };
-    play_keys(c, pan, 9);
-    if(c->oled.pan_y != 32 + 5) test_fail("pan: first line %d", c->oled.pan_y);
-    if(ccgb_video_mode(c) != VIDEO_OLED_MIDDLE) test_fail("pan then let go: mode changed");
-    if(c->gb.direct.joypad != 0xff) test_fail("pan then let go: Down leaked to the game");
-
-    // pressed together with other keys (as a matrix ghost is): ignored
-    ccgb_set_video(c, VIDEO_OLED_MIDDLE, PAL_MONO, 0);
-    const uint64_t ghost[] = { 0, view | a | down, view | a | down };
-    play_keys(c, ghost, 3);
-    if(c->gb.direct.joypad == 0xff) test_fail("ghost view key: game sees no keys");
-    const uint64_t off[] = { view | a | down, 0, 0 };
-    play_keys(c, off, 3);
-    if(ccgb_video_mode(c) != VIDEO_OLED_MIDDLE || c->oled.pan_y != 32) {
-        test_fail("ghost view key: view changed");
-    }
-
-    printf("view key checks passed\n");
-    return 0;
-}
-
 static void usage(void)
 {
     fprintf(stderr, "usage: gbtest [-s SLOTS] serial ROM MAX_FRAMES\n"
                     "       gbtest [-s SLOTS] shot ROM FRAMES MODE OUT.png [grey|green|mono|inverse]\n"
                     "       gbtest frame IN.pgm MODE OUT.png [PALETTE]\n"
                     "       gbtest oled\n"
-                    "       gbtest view ROM 0\n"
+
                     "       gbtest [-s SLOTS] bench ROM FRAMES\n"
                     "       gbtest [-s SLOTS] state ROM FRAMES\n");
     exit(2);
@@ -480,10 +385,6 @@ int main(int argc, char **argv)
         printf("%s\n", c->serial);
         printf("frames: %u\n", c->stats.frames);
         return strstr(c->serial, "Passed") && !strstr(c->serial, "Failed") ? 0 : 1;
-    }
-
-    if(!strcmp(cmd, "view")) {
-        return view_checks(c);
     }
 
     if(!strcmp(cmd, "shot")) {
