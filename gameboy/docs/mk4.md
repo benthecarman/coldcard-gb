@@ -1,9 +1,8 @@
 # Game Boy on a COLDCARD Mk4
 
-**Status: ready for a first test on a dev unit with no funds on it.** The
-plain release round trip (below) passed on a Mk4 on 2026-10-28. The Mk4
-hardware code (`external/c-modules/gameboy/hal_mk4.c`) has not run on a
-device before this test.
+**Status: runs on a Mk4 dev unit with no funds on it.** The plain release
+round trip (below) passed on a Mk4 on 2026-10-28, and the first Game Boy
+build ran games on it the same day.
 
 The Q lesson in `install-q.md` applies here too: firmware that fails
 before the PIN screen can't be removed in the field. So only flash Mk4
@@ -15,19 +14,29 @@ builds come from released code.
 
 ## The screen
 
-The Mk4 has a 128x64 one-bit OLED, and the Game Boy screen is 160x144. So
-the 160 columns are squashed to 128, and the OLED shows one **view**:
+The Mk4 has a 128x64 one-bit OLED, and the Game Boy screen is 160x144: it
+can't show all of it at a readable size. So it shows one **view**:
 
-| View | Game Boy lines |
+| View | What you see |
 |---|---|
-| Top | 0-63 |
-| Middle (default) | 40-103 |
-| Bottom | 80-143 |
-| Whole | all 144, squashed to 64 |
+| Top | lines 0-79, all 160 columns, scaled to 4/5 |
+| Middle (default) | lines 32-111, scaled to 4/5 |
+| Bottom | lines 64-143, scaled to 4/5 |
+| Whole | the whole screen at 4/9, 71x64 in the middle of the OLED |
+| Zoom | 128x64 at full size, from the middle of the screen |
 
-Where pixels merge, the darkest wins, so thin dark lines such as text
-survive. The view key (5) steps through the views while a game runs. The
-pause menu also has **View**, and the last view used is saved.
+Top, Middle and Bottom keep the picture's proportions and show more than
+half of it. Where pixels merge, the darkest wins, so thin dark lines such
+as text survive. In most games, Bottom shows the text box and Middle the
+player. Whole is too small to read text, but shows where everything is.
+It averages each pixel's area, weighted towards the darkest pixel so
+outlines stay visible. Zoom is sharp, but shows the least.
+
+**Tap** the view key (2) for the next view. **Hold** it and press the
+D-pad to move the view: up and down in Top, Middle and Bottom, any way in
+Zoom. The game doesn't see the keys while you hold the view key. The pause
+menu also has **View**, and the last view used is saved; where you moved
+it to isn't.
 
 **Shades** sets how the four Game Boy shades become on/off pixels:
 
@@ -41,21 +50,24 @@ pause menu also has **View**, and the last view used is saved.
 ## Controls
 
 ```
- 1 Select    2 Up       3 Start
- 4 Left      5 View     6 Right
- 7 Fast      8 Down     9 -
- X Menu      0 B        OK A
+ 1 Start     2 View     3 B
+ 4 Select    5 Up       6 A
+ 7 Left      8 Down     9 Right
+ X Menu      0 Fast     OK -
 ```
 
-Fast-forward runs while you hold 7. X opens the pause menu. Change the
-controls in the pause menu under **Controls**.
+The D-pad is on the arrow keys, as in the firmware's menus. Fast-forward
+runs while you hold 0. X opens the pause menu. Change the controls in the
+pause menu under **Controls**. If you never changed them, settings from
+an earlier build move to this layout by themselves.
 
 The keypad is a 4x3 matrix: if you hold three keys at the corners of a
 rectangle, it reads the fourth key as held too. No layout of 11 controls
-on 12 keys avoids this. With the default layout, it only happens when you
-hold A and B together with Up, or with a direction and Fast-forward. If
-you change a control and the change adds such a combo, the firmware lists
-it and asks you to keep or undo the change.
+on 12 keys avoids this. Of all layouts with the D-pad on the arrow keys,
+this one has the fewest such combos: they all need a diagonal to the
+right (Up+Right or Down+Right) with A. If you change a control and the
+change adds such a combo, the firmware lists it and asks you to keep or
+undo the change.
 
 ## Simulator
 

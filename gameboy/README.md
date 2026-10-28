@@ -41,14 +41,15 @@ make test
 This fetches the test ROMs, then runs Blargg's `cpu_instrs` (with a 6-slot
 and a 1-slot bank cache) and `instr_timing`, renders `dmg-acid2` through
 the full video path and compares it with the reference image, and checks the
-OLED renderer and the key ghost logic.
+OLED renderer, the view key and the key ghost logic.
 
 Other runner commands:
 
 ```
 build/gbtest shot ROM FRAMES MODE OUT.png [PALETTE]
-    # MODE: 1x 1.5x 1.5x-sharp 2x oled-top oled-middle oled-bottom oled-fit
+    # MODE: 1x 1.5x 1.5x-sharp 2x oled-top oled-middle oled-bottom oled-fit oled-zoom
     # PALETTE: grey green mono inverse
+build/gbtest frame IN.pgm MODE OUT.png [PALETTE]   # a 160x144 picture, no ROM
 build/gbtest bench ROM FRAMES
 ```
 
@@ -65,7 +66,8 @@ compiler flags, and prints the instructions per frame (in thousands) for
 emulation and screen work in each screen mode. The Q runs 2.0M cycles per
 frame (120 MHz at 59.7 fps), and each instruction takes about 1.3 to 2
 cycles, so 650K instructions per frame is roughly half the CPU. `profile`
-lists where the instructions go, by function and source line. Needs
+lists where the instructions go, by function and source line, for one
+mode (`MODE=N`, an index into `MODES` in `bench.c`). Needs
 `qemu-system-arm` and `arm-none-eabi-gcc`.
 
 ## Simulator
