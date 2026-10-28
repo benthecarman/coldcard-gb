@@ -1,0 +1,8 @@
+# Downloaded test ROMs and any ROMs or saves dropped in for testing.
+# Never commit commercial ROMs or their saves.
+roms/
+*.gb
+*.gbc
+*.sav
+# test runner build output
+test/build/
