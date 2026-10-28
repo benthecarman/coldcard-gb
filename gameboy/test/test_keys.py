@@ -19,7 +19,7 @@ def stub(name, **attrs):
 
 stub('_gameboy', NO_KEY=0xff, KEYMAP_BYTES=19, VIDEO_1X=0, VIDEO_15_SMOOTH=1,
      VIDEO_15_SHARP=2, VIDEO_2X_CROP=3, VIDEO_OLED_TOP=16, VIDEO_OLED_MIDDLE=17,
-     VIDEO_OLED_BOTTOM=18, VIDEO_OLED_FIT=19)
+     VIDEO_OLED_BOTTOM=18, VIDEO_OLED_FIT=19, VIDEO_OLED_ZOOM=20)
 stub('glob', dis=None, settings=None)
 stub('ux', ux_show_story=None, the_ux=None)
 stub('menu', MenuSystem=None, MenuItem=None)

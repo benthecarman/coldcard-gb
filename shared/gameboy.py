@@ -136,6 +136,7 @@ else:
         ('Middle', core.VIDEO_OLED_MIDDLE),
         ('Bottom', core.VIDEO_OLED_BOTTOM),
         ('Whole', core.VIDEO_OLED_FIT),
+        ('Zoom', core.VIDEO_OLED_ZOOM),
     )
     DEFAULT_VIDEO = 1
 
@@ -609,8 +610,8 @@ async def set_func_keys(cfg, f):
         line2 = 'Hold it to run the game fast. Press the menu key (%s) for none.' \
                     % key_name(menu_key)
     elif f == FUNC_VIEW:
-        line2 = 'Press it to see another part of the screen. ' \
-                'Press the menu key (%s) for none.' % key_name(menu_key)
+        line2 = 'Tap it for another view; hold it with the D-pad to move the ' \
+                'view. Press the menu key (%s) for none.' % key_name(menu_key)
     else:
         line2 = None
     first = await capture_key('Press the key for %s' % name, line2)

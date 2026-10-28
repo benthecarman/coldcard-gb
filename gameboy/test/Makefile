@@ -31,6 +31,7 @@ test: $(BUILD)/gbtest roms
 	$(BUILD)/gbtest state $(ROMS)/tobu.gb 900
 	python3 -I test_keys.py
 	$(BUILD)/gbtest oled
+	$(BUILD)/gbtest view $(ROMS)/tobu.gb 0
 	$(BUILD)/gbtest shot $(ROMS)/dmg-acid2.gb 120 1x $(BUILD)/acid2-1x.png
 	python3 -I compare_png.py $(BUILD)/acid2-1x.png $(ROMS)/dmg-acid2-reference.png 80 48
 	@echo "ALL TESTS PASSED"

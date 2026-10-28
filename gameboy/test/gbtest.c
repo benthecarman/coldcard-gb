@@ -10,7 +10,18 @@
 //
 //   gbtest [-s SLOTS] shot ROM FRAMES MODE OUT.png [grey|green]
 //       Run FRAMES frames and save the 320x240 LCD as a PNG.
-//       MODE: 1x, 1.5x, 1.5x-sharp, 2x
+//       MODE: 1x, 1.5x, 1.5x-sharp, 2x, oled-top, oled-middle, oled-bottom,
+//       oled-fit, oled-zoom
+//
+//   gbtest frame IN.pgm MODE OUT.png [PALETTE]
+//       Show a 160x144 greyscale PGM (white is shade 0) in an OLED mode,
+//       without running a ROM.
+//
+//   gbtest oled
+//       Checks of the OLED renderer on made-up pictures.
+//
+//   gbtest view ROM 0
+//       Checks of the view key, running ROM.
 //
 //   gbtest [-s SLOTS] bench ROM FRAMES
 //       Run FRAMES frames as fast as possible; print host speed and
@@ -116,6 +127,7 @@ static int parse_mode(const char *s)
     if(!strcmp(s, "oled-middle")) return VIDEO_OLED_MIDDLE;
     if(!strcmp(s, "oled-bottom")) return VIDEO_OLED_BOTTOM;
     if(!strcmp(s, "oled-fit")) return VIDEO_OLED_FIT;
+    if(!strcmp(s, "oled-zoom")) return VIDEO_OLED_ZOOM;
     test_fail("unknown mode %s", s);
 }
 
@@ -227,7 +239,7 @@ static int oled_checks(void)
     const int all = OLED_W * OLED_H;
 
     // grey ramp: shades light up 4, 3, 1 and 0 of every 4 pixels
-    gb_oled_setup(&o, VIDEO_OLED_FIT, PAL_GREY);
+    gb_oled_setup(&o, VIDEO_OLED_MIDDLE, PAL_GREY);
     const int want[4] = { all, all * 3 / 4, all / 4, 0 };
     for(int s = 0; s < 4; s++) {
         fb_fill(fb, s);
@@ -245,12 +257,13 @@ static int oled_checks(void)
     gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
     if(oled_count(out) != all) test_fail("inverse: black not lit");
 
-    // every view keeps a one-pixel dark line, in either direction, on
-    // every GB column and line it shows
-    const int modes[4] = { VIDEO_OLED_TOP, VIDEO_OLED_MIDDLE, VIDEO_OLED_BOTTOM, VIDEO_OLED_FIT };
+    // the windowed views keep a one-pixel dark line, in either direction,
+    // on every GB column and line they show
+    const int modes[4] = { VIDEO_OLED_TOP, VIDEO_OLED_MIDDLE, VIDEO_OLED_BOTTOM, VIDEO_OLED_ZOOM };
     for(int m = 0; m < 4; m++) {
         gb_oled_setup(&o, modes[m], PAL_MONO);
-        for(int gx = 0; gx < GB_W; gx++) {
+        int cols = (modes[m] == VIDEO_OLED_ZOOM) ? OLED_W : GB_W;
+        for(int gx = o.pan_x; gx < o.pan_x + cols; gx++) {
             fb_fill(fb, 0);
             for(int y = 0; y < GB_H; y++) fb_set(fb, gx, y, 3);
             gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
@@ -264,17 +277,163 @@ static int oled_checks(void)
         }
     }
 
-    // window views show their lines 1:1
+    // the scaled views cover 80 lines: bottom is lines 64-143
     gb_oled_setup(&o, VIDEO_OLED_BOTTOM, PAL_MONO);
     fb_fill(fb, 0);
-    fb_set(fb, 0, 80, 3);
+    fb_set(fb, 0, 64, 3);
     fb_set(fb, 159, 143, 3);
     gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
     if(oled_lit(out, 0, 0) || oled_lit(out, 127, 63) || oled_count(out) != all - 2) {
         test_fail("bottom view corners");
     }
 
+    // moving the middle view down as far as it goes gives the bottom view
+    gb_oled_setup(&o, VIDEO_OLED_MIDDLE, PAL_MONO);
+    if(!gb_oled_pan(&o, 0, 1000) || o.first != 64 || gb_oled_pan(&o, 0, 1)) {
+        test_fail("middle view pan: first %d", o.first);
+    }
+    if(gb_oled_pan(&o, 1, 0)) test_fail("scaled views move sideways");
+
+    // zoom is 1:1 and moves both ways, within the screen
+    gb_oled_setup(&o, VIDEO_OLED_ZOOM, PAL_MONO);
+    gb_oled_pan(&o, -1000, -1000);
+    fb_fill(fb, 0);
+    fb_set(fb, 0, 0, 3);
+    fb_set(fb, 127, 63, 3);
+    fb_set(fb, 128, 64, 3);
+    gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+    if(oled_lit(out, 0, 0) || oled_lit(out, 127, 63) || oled_count(out) != all - 2) {
+        test_fail("zoom corners");
+    }
+    gb_oled_pan(&o, 1000, 1000);
+    if(o.pan_x != GB_W - OLED_W || o.pan_y != GB_H - OLED_H) test_fail("zoom pan limits");
+
+    // whole: 71 columns in the middle; the sides stay dark
+    gb_oled_setup(&o, VIDEO_OLED_FIT, PAL_GREY);
+    const int fit = o.dst_w * OLED_H;
+    fb_fill(fb, 0);
+    gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+    if(o.dst_w != 71 || oled_count(out) != fit || oled_lit(out, o.dst_x - 1, 0)
+       || oled_lit(out, o.dst_x + o.dst_w, 0)) {
+        test_fail("whole view: %d columns, %d lit", o.dst_w, oled_count(out));
+    }
+
+    // whole: shades get darker in order, and a one-pixel dark line
+    // anywhere darkens the picture
+    int last = fit + 1;
+    for(int s = 0; s < 4; s++) {
+        fb_fill(fb, s);
+        gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+        if(oled_count(out) >= last) test_fail("whole view: shade %d not darker", s);
+        last = oled_count(out);
+    }
+    if(last != 0) test_fail("whole view: black lit");
+    for(int gx = 0; gx < GB_W; gx++) {
+        fb_fill(fb, 0);
+        for(int y = 0; y < GB_H; y++) fb_set(fb, gx, y, 3);
+        gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+        if(oled_count(out) >= fit) test_fail("whole view: column %d lost", gx);
+    }
+    for(int gy = 0; gy < GB_H; gy++) {
+        fb_fill(fb, 0);
+        for(int x = 0; x < GB_W; x++) fb_set(fb, x, gy, 3);
+        gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+        if(oled_count(out) >= fit) test_fail("whole view: line %d lost", gy);
+    }
+
     printf("oled checks passed\n");
+    return 0;
+}
+
+// A 160x144 PGM (P5, maxval 255) to the OLED, as a 320x240 PNG
+static int show_frame(const char *in, int mode, const char *out_png, const uint32_t *pal)
+{
+    static uint8_t fb[GB_H][GB_LINE_BYTES];
+    static uint8_t out[OLED_BYTES];
+    int w, h, maxval;
+
+    FILE *f = fopen(in, "rb");
+    if(!f) test_fail("can't read %s", in);
+    if(fscanf(f, "P5 %d %d %d", &w, &h, &maxval) != 3 || w != GB_W || h != GB_H
+       || maxval != 255 || fgetc(f) == EOF) {
+        test_fail("%s: want a 160x144 P5 PGM", in);
+    }
+    for(int y = 0; y < GB_H; y++) {
+        for(int x = 0; x < GB_W; x++) {
+            int v = fgetc(f);
+            if(v == EOF) test_fail("%s: cut short", in);
+            fb_set(fb, x, y, 3 - v * 4 / 256);
+        }
+    }
+    fclose(f);
+
+    gb_oled_t o;
+    gb_oled_setup(&o, mode, pal);
+    gb_oled_render(&o, (const uint8_t (*)[GB_LINE_BYTES])fb, out);
+    hal_oled_write(out);
+    save_png(out_png);
+    return 0;
+}
+
+// One ccgb_run() with keys changing each frame: keys[0] is what is held
+// when it starts
+static void play_keys(ccgb_t *c, const uint64_t *keys, int n)
+{
+    test_key_seq = keys;
+    test_key_len = n;
+    run_frames(c, n - 1);
+    test_key_seq = NULL;
+}
+
+// View key: a tap steps to the next view, held with the D-pad it moves
+// the view, and a ghost of it (pressed with other keys) does nothing.
+static int view_checks(ccgb_t *c)
+{
+    enum { K_A = 20, K_UP, K_DOWN, K_VIEW };
+    uint8_t km[GB_KEYMAP_BYTES];
+    memset(km, GB_NO_KEY, sizeof(km));
+    km[offsetof(gb_keymap_t, btn[GB_BTN_A][0])] = K_A;
+    km[offsetof(gb_keymap_t, btn[GB_BTN_UP][0])] = K_UP;
+    km[offsetof(gb_keymap_t, btn[GB_BTN_DOWN][0])] = K_DOWN;
+    km[offsetof(gb_keymap_t, menu)] = 7;
+    km[offsetof(gb_keymap_t, view)] = K_VIEW;
+    ccgb_set_keymap(c, km);
+    ccgb_set_video(c, VIDEO_OLED_MIDDLE, PAL_MONO, 0);
+    run_frames(c, 2);
+
+    const uint64_t view = 1ULL << K_VIEW, down = 1ULL << K_DOWN, a = 1ULL << K_A;
+
+    // tap; while the view key is held the game sees no keys
+    const uint64_t tap[] = { 0, view, view, view };
+    play_keys(c, tap, 4);
+    if(c->gb.direct.joypad != 0xff) test_fail("view key held: game sees keys");
+    ccgb_set_video(c, VIDEO_OLED_MIDDLE, PAL_MONO, 0);
+    const uint64_t tap_up[] = { 0, view, view, 0 };
+    play_keys(c, tap_up, 4);
+    if(ccgb_video_mode(c) != VIDEO_OLED_BOTTOM) test_fail("tap: mode %d", ccgb_video_mode(c));
+
+    // hold and move: no view change on letting go, and Down held after
+    // it stays away from the game
+    ccgb_set_video(c, VIDEO_OLED_MIDDLE, PAL_MONO, 0);
+    const uint64_t pan[] = { 0, view, view | down, view | down, view | down, view | down,
+                             view | down, down, down };
+    play_keys(c, pan, 9);
+    if(c->oled.pan_y != 32 + 5) test_fail("pan: first line %d", c->oled.pan_y);
+    if(ccgb_video_mode(c) != VIDEO_OLED_MIDDLE) test_fail("pan then let go: mode changed");
+    if(c->gb.direct.joypad != 0xff) test_fail("pan then let go: Down leaked to the game");
+
+    // pressed together with other keys (as a matrix ghost is): ignored
+    ccgb_set_video(c, VIDEO_OLED_MIDDLE, PAL_MONO, 0);
+    const uint64_t ghost[] = { 0, view | a | down, view | a | down };
+    play_keys(c, ghost, 3);
+    if(c->gb.direct.joypad == 0xff) test_fail("ghost view key: game sees no keys");
+    const uint64_t off[] = { view | a | down, 0, 0 };
+    play_keys(c, off, 3);
+    if(ccgb_video_mode(c) != VIDEO_OLED_MIDDLE || c->oled.pan_y != 32) {
+        test_fail("ghost view key: view changed");
+    }
+
+    printf("view key checks passed\n");
     return 0;
 }
 
@@ -282,7 +441,9 @@ static void usage(void)
 {
     fprintf(stderr, "usage: gbtest [-s SLOTS] serial ROM MAX_FRAMES\n"
                     "       gbtest [-s SLOTS] shot ROM FRAMES MODE OUT.png [grey|green|mono|inverse]\n"
+                    "       gbtest frame IN.pgm MODE OUT.png [PALETTE]\n"
                     "       gbtest oled\n"
+                    "       gbtest view ROM 0\n"
                     "       gbtest [-s SLOTS] bench ROM FRAMES\n"
                     "       gbtest [-s SLOTS] state ROM FRAMES\n");
     exit(2);
@@ -300,6 +461,10 @@ int main(int argc, char **argv)
     if(argc == 2 && !strcmp(argv[1], "oled")) {
         return oled_checks();
     }
+    if(argc >= 5 && !strcmp(argv[1], "frame")) {
+        return show_frame(argv[2], parse_mode(argv[3]), argv[4],
+                          (argc > 5) ? parse_palette(argv[5]) : PAL_GREY);
+    }
     if(argc < 4) usage();
 
     const char *cmd = argv[1];
@@ -315,6 +480,10 @@ int main(int argc, char **argv)
         printf("%s\n", c->serial);
         printf("frames: %u\n", c->stats.frames);
         return strstr(c->serial, "Passed") && !strstr(c->serial, "Failed") ? 0 : 1;
+    }
+
+    if(!strcmp(cmd, "view")) {
+        return view_checks(c);
     }
 
     if(!strcmp(cmd, "shot")) {

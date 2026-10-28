@@ -30,8 +30,10 @@ $(BUILD)/bench.elf: $(SRCS) rom.S link.ld $(wildcard $(CORE)/*.h) FORCE
 	    $(SRCS) rom.S $(BUILD)/string0.o
 
 # sampling profile (see profile.py)
+# MODE: index into MODES in bench.c
+MODE ?= 0
 profile:
-	$(MAKE) BUILD=build-prof EXTRA=-DPROFILE build-prof/bench.elf
+	$(MAKE) BUILD=build-prof EXTRA="-DPROFILE -DPROFILE_MODE=$(MODE)" build-prof/bench.elf
 	$(QEMU) -kernel build-prof/bench.elf 2>&1 | ./profile.py build-prof/bench.elf
 
 # -icount shift=0: virtual time advances 1 ns per instruction

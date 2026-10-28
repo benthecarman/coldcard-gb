@@ -250,7 +250,7 @@ ccgb_video_mode(ccgb_t *c)
     return c->video_mode;
 }
 
-// View key: next OLED view
+// View key tapped: next OLED view
 static void next_view(ccgb_t *c)
 {
     int mode = c->video_mode + 1;
@@ -259,6 +259,35 @@ static void next_view(ccgb_t *c)
     c->video_mode = mode;
     gb_oled_setup(&c->oled, mode, c->palette);
     c->full_redraw = true;
+}
+
+static inline uint64_t key_bit(uint8_t kn)
+{
+    return (kn < 64) ? (1ULL << kn) : 0;
+}
+
+static uint64_t button_keys(const gb_keymap_t *km, int b)
+{
+    return key_bit(km->btn[b][0]) | key_bit(km->btn[b][1]);
+}
+
+// View key held, with other keys or not: the D-pad moves the view, a
+// pixel a frame
+static void view_key_held(ccgb_t *c, uint64_t others)
+{
+    const gb_keymap_t *km = &c->keymap;
+    const uint64_t right = button_keys(km, GB_BTN_RIGHT), left = button_keys(km, GB_BTN_LEFT);
+    const uint64_t up = button_keys(km, GB_BTN_UP), down = button_keys(km, GB_BTN_DOWN);
+
+    if(!others) return;
+    c->view_tap = false;
+
+    // only D-pad keys: anything else may be a matrix ghost
+    if(others & ~(right | left | up | down)) return;
+
+    int dx = ((others & right) ? 1 : 0) - ((others & left) ? 1 : 0);
+    int dy = ((others & down) ? 1 : 0) - ((others & up) ? 1 : 0);
+    if(gb_oled_pan(&c->oled, dx, dy)) c->full_redraw = true;
 }
 
     void
@@ -323,11 +352,6 @@ ccgb_state_load(ccgb_t *c, const uint8_t *state)
         c->ram_dirty = true;
         c->ram_first_write = c->ram_last_write = c->stats.frames;
     }
-}
-
-static inline uint64_t key_bit(uint8_t kn)
-{
-    return (kn < 64) ? (1ULL << kn) : 0;
 }
 
 static uint8_t joypad_from_keys(const gb_keymap_t *km, uint64_t keys)
@@ -484,6 +508,7 @@ ccgb_run(ccgb_t *c, uint32_t max_frames, bool redraw)
     // until released, so they don't leak into the game.
     uint64_t masked = hal_keys();
     c->last_keys = masked;
+    c->viewing = c->view_tap = false;
 
     c->deadline_ns = hal_micros() * 1000;
 
@@ -498,14 +523,27 @@ ccgb_run(ccgb_t *c, uint32_t max_frames, bool redraw)
             rv = GB_RUN_MENU;
             break;
         }
-        if(view_bit && (keys & view_bit) && !(c->last_keys & view_bit) && keys == view_bit
-                && VIDEO_IS_OLED(c->video_mode)) {
-            next_view(c);
+
+        // View key: only counts pressed alone, like the menu key. While it
+        // is held, the game sees no keys.
+        if(view_bit && VIDEO_IS_OLED(c->video_mode)) {
+            if((keys & view_bit) && !(c->last_keys & view_bit)) {
+                c->viewing = c->view_tap = (keys == view_bit);
+            }
+            if(c->viewing && (keys & view_bit)) {
+                view_key_held(c, keys & ~view_bit);
+            } else if(c->viewing) {
+                // let go: a tap (nothing else pressed meanwhile) is next view
+                if(c->view_tap) next_view(c);
+                c->viewing = c->view_tap = false;
+                // D-pad keys still held stay away from the game until let go
+                masked |= keys;
+            }
         }
         c->last_keys = keys;
 
         bool fast = (keys & fast_bit) != 0;
-        c->gb.direct.joypad = joypad_from_keys(km, keys & ~masked);
+        c->gb.direct.joypad = joypad_from_keys(km, c->viewing ? 0 : keys & ~masked);
 
         // Draw this frame unless emulation is running late: then it is
         // emulated without drawing (much cheaper) to catch up. Still show

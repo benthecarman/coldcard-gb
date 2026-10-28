@@ -45,8 +45,9 @@ enum {
 #define GB_NO_KEY           0xff
 
 // Key numbers (see hal_keys()) for each button, then the menu,
-// fast-forward and view keys. Unused entries are GB_NO_KEY. The view key
-// steps through the OLED views; like the menu key, it only counts alone.
+// fast-forward and view keys. Unused entries are GB_NO_KEY. A tap of the
+// view key steps through the OLED views; held with the D-pad, it moves the
+// view.
 typedef struct {
     uint8_t btn[GB_NUM_BTN][GB_KEYS_PER_BTN];
     uint8_t menu;
@@ -103,6 +104,8 @@ typedef struct ccgb_s {
 
     gb_keymap_t keymap;
     uint64_t last_keys;
+    bool viewing;               // view key pressed alone, still held
+    bool view_tap;              //   and nothing else pressed since
 
     // pacing, in nanoseconds of the monotonic clock
     uint64_t deadline_ns;

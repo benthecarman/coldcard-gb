@@ -209,6 +209,7 @@ static const struct { int mode; const char *name; } MODES[] = {
     { VIDEO_2X_CROP, "2x-crop" },
     { VIDEO_OLED_MIDDLE, "oled-middle" },
     { VIDEO_OLED_FIT, "oled-fit" },
+    { VIDEO_OLED_ZOOM, "oled-zoom" },
 };
 
 static void bench_mode(int mode, const char *name)
@@ -292,7 +293,10 @@ int main(void)
     out("\n");
 
 #ifdef PROFILE
-    bench_mode(MODES[0].mode, MODES[0].name);
+#ifndef PROFILE_MODE
+#define PROFILE_MODE 0      // index into MODES
+#endif
+    bench_mode(MODES[PROFILE_MODE].mode, MODES[PROFILE_MODE].name);
     dump_profile();
 #else
     for(unsigned i = 0; i < sizeof(MODES) / sizeof(MODES[0]); i++) {
