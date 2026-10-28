@@ -14,35 +14,27 @@ builds come from released code.
 
 ## The screen
 
-The Mk4 has a 128x64 one-bit OLED, and the Game Boy screen is 160x144: it
-can't show all of it at a readable size. So it shows one **view**:
+The Mk4 has a 128x64 one-bit OLED, and the Game Boy screen is 160x144.
+The OLED always shows the whole Game Boy screen, compressed to fit.
+**Screen** in the pause menu picks how:
 
-| View | What you see |
+| Screen | What you see |
 |---|---|
-| Top | lines 0-79, all 160 columns, scaled to 4/5 |
-| Middle (default) | lines 32-111, scaled to 4/5 |
-| Bottom | lines 64-143, scaled to 4/5 |
-| Whole | the whole screen at 4/9, 71x64 in the middle of the OLED |
-| Zoom | 128x64 at full size, from the middle of the screen |
+| Fill (default) | squashed to fill the OLED: columns to 4/5, lines to 4/9 |
+| Keep Shape | scaled to 4/9 both ways: 71x64 in the middle, dark at the sides |
 
-Top, Middle and Bottom keep the picture's proportions and show more than
-half of it. Where pixels merge, the darkest wins, so thin dark lines such
-as text survive. In most games, Bottom shows the text box and Middle the
-player. Whole is too small to read text, but shows where everything is.
-It averages each pixel's area, weighted towards the darkest pixel so
-outlines stay visible. Zoom is sharp, but shows the least.
-
-**Tap** the view key (2) for the next view. **Hold** it and press the
-D-pad to move the view: up and down in Top, Middle and Bottom, any way in
-Zoom. The game doesn't see the keys while you hold the view key. The pause
-menu also has **View**, and the last view used is saved; where you moved
-it to isn't.
+Fill uses the whole OLED, so it shows the most detail; everything looks
+wide and flat. Where pixels merge, the darkest wins, so thin dark lines
+such as text strokes and outlines survive. Keep Shape keeps proportions,
+but is much smaller. It averages each pixel's area, weighted towards the
+darkest pixel so outlines stay visible. In both, text is only just
+readable: an 8-pixel line of text becomes 3 or 4 pixels high.
 
 **Shades** sets how the four Game Boy shades become on/off pixels:
 
 | Shades | Result |
 |---|---|
-| Two-Tone (default) | light shades off, dark shades on |
+| Two-Tone (default) | light shades lit, dark shades off, like the Game Boy |
 | Dithered | four levels, as a 2x2 dither pattern |
 | Inverse | Two-Tone, reversed |
 | Dither Inverse | Dithered, reversed |
@@ -50,7 +42,7 @@ it to isn't.
 ## Controls
 
 ```
- 1 Start     2 View     3 B
+ 1 Start     2 -        3 B
  4 Select    5 Up       6 A
  7 Left      8 Down     9 Right
  X Menu      0 Fast     OK -
@@ -58,8 +50,8 @@ it to isn't.
 
 The D-pad is on the arrow keys, as in the firmware's menus. Fast-forward
 runs while you hold 0. X opens the pause menu. Change the controls in the
-pause menu under **Controls**. If you never changed them, settings from
-an earlier build move to this layout by themselves.
+pause menu under **Controls**. Settings saved by an earlier Mk4 build
+start again from this layout and Fill; the shades are kept.
 
 The keypad is a 4x3 matrix: if you hold three keys at the corners of a
 rectangle, it reads the fourth key as held too. No layout of 11 controls
