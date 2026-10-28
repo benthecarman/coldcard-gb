@@ -69,16 +69,27 @@ gb = load(False)
 mk = gb.MK4_KEYS.index
 check(gb.ghosts([mk('6'), mk('3'), mk('2')]) == {mk('5')}, 'mk4 basic ghost')
 check(gb.keymap_ok(gb.DEFAULT_KEYMAP), 'mk4 default keymap valid')
-check(len(gb.DEFAULT_KEYMAP) == 19 and gb.DEFAULT_KEYMAP[gb.POS_VIEW] == mk('5'), 'mk4 view key')
+check(len(gb.DEFAULT_KEYMAP) == 19 and gb.DEFAULT_KEYMAP[gb.POS_VIEW] == mk('2'), 'mk4 view key')
 
-# the default layout's ghosts all need A and B held with Up, or with a
-# direction and Fast-forward; and Up during the A+B+Select+Start soft
-# reset, which resets anyway
+# D-pad on the arrow keys
+dpad = [gb.DEFAULT_KEYMAP[2 * f] for f in range(4, 8)]
+check(dpad == [mk('9'), mk('7'), mk('5'), mk('8')], 'mk4 D-pad: %r' % dpad)
+
+# the default layout's ghosts all need a diagonal to the right, with A
 problems = gb.ghost_problems(gb.DEFAULT_KEYMAP)
-check(all('A+B' in p for p in problems) and
-      all(p.startswith('Up') or 'Fast-forward' in p or p.startswith('A+B+Select+Start')
-          for p in problems) and len(problems) == 9,
+check(len(problems) == 8 and
+      all(p.startswith(('Up+Right+A', 'Down+Right+A')) for p in problems),
       'mk4 default keymap: %r' % problems)
+
+# settings with the old default get the new one; others are kept
+saved = {}
+gb.settings = types.SimpleNamespace(get=lambda k: saved.get(k))
+saved['gb'] = dict(v=1, p=0, k=list(gb.OLD_DEFAULT_KEYMAPS[0]))
+check(bytes(gb.Config().keymap) == gb.DEFAULT_KEYMAP, 'mk4 old default keymap not replaced')
+mine = bytearray(gb.DEFAULT_KEYMAP)
+mine[0] = mk('y')
+saved['gb'] = dict(v=1, p=0, k=list(mine))
+check(gb.Config().keymap == mine, 'mk4 own keymap not kept')
 
 names = [gb.key_name(k) for k in (mk('y'), mk('x'), mk('5'), 0xff)]
 check(names == ['OK', 'X', '5', 'none'], repr(names))

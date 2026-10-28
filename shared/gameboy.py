@@ -71,6 +71,7 @@ if not MK4:
         KN_O,
         NO,
     ])
+    OLD_DEFAULT_KEYMAPS = ()
 
     # key numbers are row * 10 + col of the keyboard matrix
     ROW_KEYS = 10
@@ -105,22 +106,28 @@ else:
     MK4_KEYS = 'y0x987654321'
     mk = MK4_KEYS.index
 
-    # D-pad on 2 4 6 8, A and B on OK and 0, Start and Select on 3 and 1.
-    # Of the layouts tried, this one has the fewest matrix ghosts: all of
-    # them need A and B held with Up, or with a direction and Fast-forward.
+    # D-pad on the arrow keys: 5 up, 7 left, 8 down, 9 right, as in the
+    # firmware's menus. With the D-pad there, this layout has the fewest
+    # matrix ghosts of all: they all need a diagonal to the right, with A.
     DEFAULT_KEYMAP = bytes([
-        mk('y'), NO,
-        mk('0'), NO,
-        mk('1'), NO,
-        mk('3'), NO,
-        mk('6'), NO,
-        mk('4'), NO,
-        mk('2'), NO,
-        mk('8'), NO,
-        mk('x'),
-        mk('7'),
-        mk('5'),
+        mk('6'), NO,        # A
+        mk('3'), NO,        # B
+        mk('4'), NO,        # Select
+        mk('1'), NO,        # Start
+        mk('9'), NO,        # Right
+        mk('7'), NO,        # Left
+        mk('5'), NO,        # Up
+        mk('8'), NO,        # Down
+        mk('x'),            # menu
+        mk('0'),            # fast-forward
+        mk('2'),            # view
     ])
+
+    # earlier defaults: settings that still have one get the new one
+    OLD_DEFAULT_KEYMAPS = (
+        bytes([mk('y'), NO, mk('0'), NO, mk('1'), NO, mk('3'), NO, mk('6'), NO,
+               mk('4'), NO, mk('2'), NO, mk('8'), NO, mk('x'), mk('7'), mk('5')]),
+    )
     del mk
 
     ROW_KEYS = 3
@@ -253,6 +260,7 @@ class Config:
         try:
             km = bytearray(d.get('k'))
             assert keymap_ok(km)
+            assert bytes(km) not in OLD_DEFAULT_KEYMAPS
         except:
             km = bytearray(DEFAULT_KEYMAP)
         self.keymap = km
