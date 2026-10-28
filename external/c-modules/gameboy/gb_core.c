@@ -13,8 +13,10 @@
 // Give up catching up if this far behind, and just carry on from now.
 #define MAX_BEHIND_NS       (100 * 1000 * 1000ULL)
 
-// When emulation is behind, still show at least every Nth frame.
+// When emulation is behind, frames aren't drawn; but at least every
+// (MAX_UNSHOWN+1)th frame is. Behind means more than LATE_NS late.
 #define MAX_UNSHOWN         3
+#define LATE_NS             (2 * 1000 * 1000ULL)
 
 // Output groups per hal_lcd_write()
 #define GROUPS_PER_WRITE    4
@@ -124,17 +126,44 @@ static enum gb_serial_rx_ret_e serial_rx(struct gb_s *gb, uint8_t *rx)
     return GB_SERIAL_RX_NO_CONNECTION;
 }
 
+// Is a frame buffer line different from what the LCD shows?
+static bool line_differs(const ccgb_t *c, int line)
+{
+    const uint32_t *a = (const uint32_t *)c->fb[line];
+    const uint32_t *b = (const uint32_t *)c->fb_shown[line];
+
+    for(int i = 0; i < GB_LINE_BYTES / 4; i++) {
+        if(a[i] != b[i]) return true;
+    }
+    return false;
+}
+
 static void draw_line(struct gb_s *gb, const uint8_t *pixels, const uint_fast8_t line)
 {
     ccgb_t *c = gb->direct.priv;
 
     if(line >= GB_H) return;
 
-    uint8_t *d = c->fb[line];
-    for(int i = 0; i < GB_LINE_BYTES; i++, pixels += 4) {
-        d[i] = (pixels[0] & 3) | ((pixels[1] & 3) << 2)
-                | ((pixels[2] & 3) << 4) | ((pixels[3] & 3) << 6);
+    // 2 bits per pixel: shades are bits 1..0 of each byte, pixel 0 goes
+    // to bits 1..0. The multiply moves the four 2-bit fields of a word
+    // into its top byte, side by side; the other partial products land
+    // below bit 24 without overlapping, so nothing carries into it.
+    const uint32_t *shown = (const uint32_t *)c->fb_shown[line];
+    uint32_t *d = (uint32_t *)c->fb[line];
+    uint32_t diff = 0;
+    for(int i = 0; i < GB_LINE_BYTES / 4; i++, pixels += 16) {
+        uint32_t px[4];
+        memcpy(px, pixels, 16);
+
+        uint32_t out = 0;
+        for(int k = 0; k < 4; k++) {
+            out |= (((px[k] & 0x03030303) * 0x01041040) >> 24) << (8 * k);
+        }
+        diff |= out ^ shown[i];
+        d[i] = out;
     }
+
+    c->line_dirty[line] = diff != 0;
 }
 
     int
@@ -318,7 +347,10 @@ static bool group_changed(const ccgb_t *c, int group)
     const gb_video_t *v = &c->video;
     int line = v->src_first + group * v->src_lines;
 
-    return memcmp(c->fb[line], c->fb_shown[line], v->src_lines * GB_LINE_BYTES) != 0;
+    for(int i = 0; i < v->src_lines; i++) {
+        if(c->line_dirty[line + i]) return true;
+    }
+    return false;
 }
 
 // Send the lines that changed since the last frame shown.
@@ -349,6 +381,7 @@ static void present(ccgb_t *c)
                 gb_video_render_group(v, (const uint8_t (*)[GB_LINE_BYTES])c->fb,
                                       g, dst + k * group_px);
                 memcpy(c->fb_shown[line], c->fb[line], v->src_lines * GB_LINE_BYTES);
+                memset(&c->line_dirty[line], 0, v->src_lines);
             }
 
             hal_lcd_write(dst, n * group_px);
@@ -357,7 +390,12 @@ static void present(ccgb_t *c)
         }
     }
 
-    c->full_redraw = false;
+    if(c->full_redraw) {
+        // lines outside the picture (2x crop) count as shown too
+        memcpy(c->fb_shown, c->fb, sizeof(c->fb));
+        memset(c->line_dirty, 0, sizeof(c->line_dirty));
+        c->full_redraw = false;
+    }
 }
 
 static bool save_due(const ccgb_t *c)
@@ -410,13 +448,22 @@ ccgb_run(ccgb_t *c, uint32_t max_frames, bool redraw)
         bool fast = (keys & fast_bit) != 0;
         c->gb.direct.joypad = joypad_from_keys(km, keys & ~masked);
 
+        // Draw this frame unless emulation is running late: then it is
+        // emulated without drawing (much cheaper) to catch up. Still show
+        // at least every MAX_UNSHOWN+1th frame.
         uint64_t t0 = hal_micros();
+        bool late = fast || t0 * 1000 > c->deadline_ns + LATE_NS;
+        bool render = !late || c->frames_unshown >= MAX_UNSHOWN;
+
+        if(!render) c->gb.display.lcd_draw_line = NULL;
         gb_run_frame(&c->gb);
+        c->gb.display.lcd_draw_line = draw_line;
         c->stats.frames++;
 
-        if(!(c->gb.hram_io[IO_LCDC] & LCDC_ENABLE)) {
+        if(render && !(c->gb.hram_io[IO_LCDC] & LCDC_ENABLE)) {
             // LCD off shows blank (lightest shade)
             memset(c->fb, 0, sizeof(c->fb));
+            for(int i = 0; i < GB_H; i++) c->line_dirty[i] = line_differs(c, i);
         }
 
         uint64_t t1 = hal_micros();
@@ -427,10 +474,8 @@ ccgb_run(ccgb_t *c, uint32_t max_frames, bool redraw)
             break;
         }
 
-        // Show this frame unless emulation is already late for the next one.
         c->deadline_ns += FRAME_NS;
-        bool behind = (t1 * 1000) > c->deadline_ns;
-        if((!behind && !fast) || c->frames_unshown >= MAX_UNSHOWN) {
+        if(render) {
             present(c);
             c->stats.shown++;
             c->frames_unshown = 0;

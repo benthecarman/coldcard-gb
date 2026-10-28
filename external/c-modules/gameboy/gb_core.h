@@ -84,9 +84,11 @@ typedef struct ccgb_s {
     bool ram_dirty;
     uint32_t ram_first_write, ram_last_write;
 
-    // frame buffers: being drawn, and what the LCD shows now
-    uint8_t fb[GB_H][GB_LINE_BYTES];
-    uint8_t fb_shown[GB_H][GB_LINE_BYTES];
+    // frame buffers: being drawn, and what the LCD shows now; a line is
+    // dirty when the two differ
+    uint8_t fb[GB_H][GB_LINE_BYTES] __attribute__((aligned(4)));
+    uint8_t fb_shown[GB_H][GB_LINE_BYTES] __attribute__((aligned(4)));
+    bool line_dirty[GB_H];
     bool full_redraw;
     gb_video_t video;
     uint16_t out_buf[2][4 * VIDEO_MAX_GROUP_PX];
