@@ -43,12 +43,13 @@ def can_trade(title, dest):
 
 def party_ok(wram, at):
     # Does WRAM (from 0xc000) hold a player name and party at `at`?
+    # (Slices copied to bytes: MicroPython's memoryview has no `in`.)
     o = at - 0xc000
-    name = wram[o:o + NAME]
+    name = bytes(wram[o:o + NAME])
     count = wram[o + NAME]
     if NAME_END not in name or not (1 <= count <= PARTY):
         return False
-    species = wram[o + NAME + 1:o + NAME + 1 + count + 1]
+    species = bytes(wram[o + NAME + 1:o + NAME + 1 + count + 1])
     if species[count] != 0xff:
         return False
     mons = o + NAME + 1 + PARTY + 1

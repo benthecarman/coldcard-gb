@@ -297,6 +297,15 @@ class Game:
         self.frames_seen = 0
         self.speed = None           # see speed_report()
         self.load_info = ''
+        self.title = ''
+        self.dest = 0               # header 0x14a: 0 is Japan
+
+        # Pokemon trade (see trade_menu): our name and the Pokemon we
+        # give, and their name and Pokemon, both as gbtrade bytes
+        self.give = None
+        self.get = None
+        self.traded = False
+        self.refused_seen = 0
 
     def load(self):
         # Copy ROM file into emulator memory (PSRAM on Q), then .sav.
@@ -320,6 +329,8 @@ class Game:
                         raise OSError('short read')
                     if pos == 0 and n > 0x143 and buf[0x143] == 0xc0:
                         raise ValueError('This game needs a Game Boy Color.')
+                    if pos == 0 and n > 0x14a:
+                        self.dest = buf[0x14a]
                     emu.rom_write(pos, memoryview(buf)[0:n])
                     pos += n
                     dis.progress_bar_show(pos / size)
@@ -328,6 +339,7 @@ class Game:
             gc.collect()
 
             title, self.ram_size, slots = emu.start(CACHE_SLOTS)
+            self.title = title
             if self.ram_size:
                 self.read_sav()
 
@@ -402,6 +414,28 @@ class Game:
                                 % err_text(exc),
                                 title='Game Boy')
             return False
+
+    def can_trade(self):
+        # Pokemon trades by QR code: the Q has the scanner (and gbtrade.py)
+        if not version.has_qr:
+            return False
+        import gbtrade
+        return gbtrade.can_trade(self.title, self.dest)
+
+    def trade_link(self):
+        # Plug the trade partner in once both Pokemon are known. Only
+        # when they change: this starts the partner over. After a trade
+        # it stays, until a reset: the game keeps talking to it.
+        if self.give and self.get:
+            self.emu.link_trade(self.get[0], self.get[1], self.give[1])
+        else:
+            self.emu.link_trade(None)
+
+    def trade_clear(self):
+        self.give = self.get = None
+        self.traded = False
+        self.refused_seen = 0
+        self.trade_link()
 
     def write_state(self):
         emu = self.emu
@@ -669,6 +703,8 @@ async def pause_menu(game, cfg):
     emu = game.emu
     await keys_settle()
     await game.save_or_complain()
+    if game.can_trade():
+        await trade_news(game)
 
     cursor = 0
     while True:
@@ -680,8 +716,11 @@ async def pause_menu(game, cfg):
             ('%s: %s' % (PALETTE_LABEL, PALETTES[cfg.palette][0]), 'palette'),
             ('Controls', 'controls'),
             ('Speed', 'speed'),
+            ('Reset Game', 'reset'),
             ('Quit Game', 'quit'),
         ]
+        if game.can_trade():
+            items.insert(3, (trade_label(game), 'trade'))
         idx = await menu_pick([l for l, _ in items], cursor=cursor)
         what = items[idx][1] if idx is not None else 'resume'
         cursor = idx or 0
@@ -691,6 +730,23 @@ async def pause_menu(game, cfg):
 
         if what == 'quit':
             return await quit_ok(game)
+
+        if what == 'reset':
+            ch = await ux_show_story('Turn the Game Boy off and on again? Progress since '
+                                     'the game last saved is lost.', title='Reset Game')
+            if ch != 'y':
+                continue
+            emu.reset()
+            # the partner starts over too; after a trade, it's gone
+            if game.traded:
+                game.trade_clear()
+            elif game.can_trade():
+                game.trade_link()
+            return False
+
+        if what == 'trade':
+            await trade_menu(game)
+            continue
 
         if what in ('save_state', 'load_state'):
             dis.fullscreen('Saving...' if what == 'save_state' else 'Loading...')
@@ -723,6 +779,138 @@ async def pause_menu(game, cfg):
 
         cfg.save()
         cfg.apply(emu)
+
+# Pokemon trades by QR code (Red, Blue, Yellow; see gbtrade.py)
+
+TRADE_HELP = """\
+Both players do this on their own COLDCARD.
+
+1. Pick the Pokemon you will give. Your COLDCARD shows it as a QR code: let the other player scan it.
+
+2. Scan the other player's code.
+
+3. In the game, go to a Pokemon Center and talk to the woman at the right of the counter (Cable Club). Sit at the table and trade the Pokemon you picked.
+
+4. After the trade, use Reset Game: in these games that is the only way out of the Trade Center.
+
+The game needs you to have the Pokedex first. Only the Pokemon you picked can go, and only once."""
+
+def trade_label(game):
+    if game.traded:
+        return 'Trade Pokemon: Done'
+    if game.give and game.get:
+        return 'Trade Pokemon: Ready'
+    return 'Trade Pokemon'
+
+async def trade_news(game):
+    # Tell how the trade went since the last pause
+    import gbtrade
+    _, traded, refused = game.emu.link_status()
+
+    if traded and not game.traded:
+        game.traded = True
+        await ux_show_story('You gave %s and got %s. The game saved your party.\n\n'
+                            'Use Reset Game to leave the Trade Center.'
+                            % (gbtrade.label(game.give[1]), gbtrade.label(game.get[1])),
+                            title='Trade Done')
+    elif refused > game.refused_seen:
+        game.refused_seen = refused
+        await ux_show_story("The trade was canceled: that isn't the Pokemon you promised. "
+                            "Trade %s." % gbtrade.label(game.give[1]), title='Trade')
+
+async def trade_show(game):
+    import gbtrade
+    from ux import show_qr_code
+    name, mon = game.give
+    await show_qr_code(gbtrade.encode(name, mon), is_alnum=True, msg=gbtrade.label(mon),
+                       allow_nfc=False)
+
+async def trade_pick(game):
+    # Pick the Pokemon to give, from the party in the game's memory
+    import gbtrade
+    got = gbtrade.read_party(game.emu.wram())
+    if not got:
+        await ux_show_story("Can't find your party. Start or continue a game, with at "
+                            "least one Pokemon.", title='Trade')
+        return False
+    name, party = got
+
+    chosen = None
+    if game.give:
+        for i, m in enumerate(party):
+            if gbtrade.same(m, game.give[1]):
+                chosen = i
+    idx = await menu_pick([gbtrade.label(m) for m in party], chosen=chosen)
+    if idx is None:
+        return False
+
+    game.give = (name, party[idx])
+    return True
+
+async def trade_scan(game):
+    # Scan the other player's code; True if one came in
+    import gbtrade
+    from ux_q1 import QRScannerInteraction
+
+    problem = None
+    while True:
+        # BBQr would collect in PSRAM, over the ROM: take it as text
+        got = await QRScannerInteraction.scan("Scan the other player's code", line2=problem,
+                                              bbqr_ok=False)
+        if got is None:
+            return False
+        try:
+            game.get = gbtrade.decode(got)
+            return True
+        except ValueError as exc:
+            problem = str(exc)
+
+async def trade_menu(game):
+    import gbtrade
+
+    while True:
+        if game.traded:
+            await ux_show_story('This trade is done. Use Reset Game to leave the Trade '
+                                'Center; then you can trade again.', title='Trade')
+            return
+
+        items = [('Give: ' + (gbtrade.label(game.give[1]) if game.give else 'pick one'), 'give')]
+        if game.give:
+            items.append(('Show My Code', 'show'))
+        items.append(('Get: ' + (gbtrade.label(game.get[1]) if game.get else 'scan code'), 'get'))
+        items.append(('How To Trade', 'help'))
+        if game.give or game.get:
+            items.append(('Cancel Trade', 'cancel'))
+
+        idx = await menu_pick([l for l, _ in items])
+        if idx is None:
+            return
+        what = items[idx][1]
+        before = (game.give, game.get)
+
+        if what == 'give':
+            if await trade_pick(game):
+                await trade_show(game)
+        elif what == 'show':
+            await trade_show(game)
+        elif what == 'get':
+            if await trade_scan(game):
+                await ux_show_story('%s offers %s.' % (gbtrade.text(game.get[0]),
+                                                      gbtrade.label(game.get[1])),
+                                    title='Trade')
+        elif what == 'help':
+            await ux_show_story(TRADE_HELP, title='How To Trade')
+        elif what == 'cancel':
+            game.trade_clear()
+
+        if (game.give, game.get) == before:
+            continue
+        game.trade_link()
+        if game.give and game.get:
+            await ux_show_story('You give %s, %s gives %s.\n\nNow, in the game, go to the '
+                                'Cable Club in a Pokemon Center.'
+                                % (gbtrade.label(game.give[1]), gbtrade.text(game.get[0]),
+                                   gbtrade.label(game.get[1])), title='Ready to Trade')
 
 async def quit_ok(game):
     # Last chance to write the .sav. Returns True to quit.
