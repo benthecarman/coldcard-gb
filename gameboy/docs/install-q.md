@@ -69,7 +69,8 @@ To go back, install the official DFU the same way.
    it the ROM's name with `.sav`.
 2. **Advanced/Tools > Game Boy**, then pick the ROM.
 3. CANCEL opens the pause menu: Resume, save and load state, screen scale,
-   palette, controls, **Speed**, and quit.
+   palette, controls, **Speed**, **Reset Game** (off and on again), and
+   quit. Pokemon Red, Blue and Yellow also get **Trade Pokemon**.
 
 Default controls:
 
@@ -83,7 +84,25 @@ Default controls:
 | Pause menu | CANCEL |
 | Fast-forward (hold) | O |
 
-## Saves
+## Trading Pokemon
+
+Two Qs trade Pokemon by QR code; the emulator plays the other Game Boy
+on the link cable. Red, Blue and Yellow can trade with each other, but
+not the Japanese versions.
+
+1. Both players: in the game, get the Pokedex (it opens the Cable Club),
+   and go to a Pokemon Center.
+2. Pause menu > **Trade Pokemon** > **Give**: pick the Pokemon to give.
+   **Show My Code** shows it as a QR code.
+3. **Get**: scan the other player's code.
+4. Resume, talk to the Cable Club desk (on the right), and sit at the
+   table. The other player's Pokemon is on offer. Trade the one you
+   promised; any other is refused.
+5. After the trade the game saves your party. Use **Reset Game** to leave
+   the Trade Center.
+
+Nothing stops a player from scanning the same code twice.
+
 
 - The game's own save (cart RAM) goes to `NAME.sav` when the game saves,
   when the pause menu opens, and on quit. It is plain cart RAM, the format

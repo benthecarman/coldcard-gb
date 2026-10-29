@@ -18,12 +18,14 @@ The Mk4 port is ready for a first test on a dev unit; see
 |---|---|
 | `external/c-modules/gameboy/` | C module `_gameboy`: core, LCD and OLED video, HALs, MicroPython bindings |
 | `external/c-modules/gameboy/hal_q1.c`, `hal_mk4.c`, `hal_stm32.c` | hardware: Q screen and keys, Mk4 screen and keys, and the clock and ROM storage both share |
+| `external/c-modules/gameboy/gb_link.c` | the other Game Boy on the link cable, for Pokemon trades |
 | `external/c-modules/gameboy/peanut_gb.h` | Peanut-GB `d0bcca77` (2026-09-21, v1.3.0), with a faster background and window drawer; changes are marked `CCGB:` |
-| `shared/gameboy.py` | ROM picker, loading, saves, pause menu, settings |
-| `shared/manifest_q1.py`, `manifest_mk4.py` | one line each: freezes `gameboy.py` into the firmware |
+| `shared/gameboy.py` | ROM picker, loading, saves, pause menu, settings, trade menu |
+| `shared/gbtrade.py` | Pokemon trade codes (QR text) and reading the party from WRAM; Q only |
+| `shared/manifest_q1.py`, `manifest_mk4.py` | freeze `gameboy.py` (and on the Q `gbtrade.py`) into the firmware |
 | `shared/flow.py` | menu hooks (two `MenuItem` lines + a lazy-import wrapper) |
 | `unix/simulator.py` | numpy blit for raw pixel messages, and reads big display updates in full |
-| `gameboy/test/` | headless test runner (host gcc) |
+| `gameboy/test/` | headless test runner (host gcc), and `gbpy.py` to drive the core from Python |
 | `gameboy/bench/` | instruction counts on an emulated Cortex-M4 (QEMU) |
 | `gameboy/scripts/build-q1.sh` | builds the Q firmware in Coinkite's Docker image and signs it with key zero (`stm32/gameboy-q.dfu`); read `docs/install-q.md` before flashing |
 | `gameboy/scripts/build-mk4.sh` | the same for the Mk4 (`stm32/gameboy-mk4.dfu`); read `docs/mk4.md` first |
@@ -42,6 +44,17 @@ This fetches the test ROMs, then runs Blargg's `cpu_instrs` (with a 6-slot
 and a 1-slot bank cache) and `instr_timing`, renders `dmg-acid2` through
 the full video path and compares it with the reference image, and checks the
 OLED renderer and the key ghost logic.
+
+Pokemon trades need a ROM that can't be in the repo:
+
+```
+make trade ROM=path/to/red.gb
+```
+
+This needs Pokemon Red (USA, Europe). It plays two games, has them swap
+trade codes, and trades at the Cable Club: a wrong Pokemon is refused,
+then a Kadabra and a Machoke are traded and both evolve. Then it checks
+the save and a reset. Screenshots go to `build/trade/`.
 
 Other runner commands:
 
