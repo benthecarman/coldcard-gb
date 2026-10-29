@@ -803,10 +803,11 @@ class QRScannerInteraction:
         pass
 
     @staticmethod
-    async def scan(prompt, line2=None, enter_quits=False):
+    async def scan(prompt, line2=None, enter_quits=False, bbqr_ok=True):
         # draw animation, while waiting for them to scan something
         # - CANCEL to abort
         # - returns a string, BBQr object or None.
+        # - bbqr_ok=False: BBQr comes back as plain text (keeps PSRAM untouched)
         from glob import dis, SCAN
         from ux import ux_wait_keydown
         frames = [ 1, 2, 3, 4, 5, 4, 3, 2 ]
@@ -820,7 +821,7 @@ class QRScannerInteraction:
             dis.text(None, -1, line2, dark=True)
         dis.show()
 
-        task = asyncio.create_task(SCAN.scan_once())
+        task = asyncio.create_task(SCAN.scan_once(bbqr_ok))
 
         escape = KEY_CANCEL + (KEY_ENTER if enter_quits else '')
 

@@ -223,9 +223,10 @@ class QRScanner:
         # prevent scanning magic QR to affect settings
         await self.txrx('S_CMD_0000')         # close setting codes
             
-    async def scan_once(self):
+    async def scan_once(self, bbqr_ok=True):
         # Blocks until something is scanned. Returns it as string
-        # - will keep scanning if BBRq detected
+        # - will keep scanning if BBRq detected (unless bbqr_ok=False: BBQr
+        #   parts collect in PSRAM, where something else may live)
         # - updates UX via BBQrState.collect() while BBQr is being received
         # - returns a BBQr object at that point
         self.scan_light = False
@@ -264,7 +265,7 @@ class QRScanner:
                     rv = await self._readline()
                     if not rv: continue
 
-                    if rv[0:2] == 'B$' and bbqr.collect(rv):
+                    if bbqr_ok and rv[0:2] == 'B$' and bbqr.collect(rv):
                         # BBQr protocol detected, accepted need to collect more data
                         continue
 
