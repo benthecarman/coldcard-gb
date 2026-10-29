@@ -3,7 +3,8 @@
 #
 GB_DIR := $(USERMOD_DIR)
 
-GB_CORE_SRC = $(GB_DIR)/modgameboy.c $(GB_DIR)/gb_core.c $(GB_DIR)/gb_video.c $(GB_DIR)/gb_oled.c
+GB_CORE_SRC = $(GB_DIR)/modgameboy.c $(GB_DIR)/gb_core.c $(GB_DIR)/gb_video.c $(GB_DIR)/gb_oled.c \
+              $(GB_DIR)/gb_link.c
 
 ifndef BOARD
 

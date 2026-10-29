@@ -22,6 +22,7 @@
 
 #include "gb_video.h"
 #include "gb_oled.h"
+#include "gb_link.h"
 
 #define GB_BANK_SIZE        0x4000
 #define GB_MAX_SLOTS        16
@@ -113,6 +114,9 @@ typedef struct ccgb_s {
     // serial port output (Blargg's test ROMs print results there)
     char serial[512];
     int serial_len;
+
+    // what's on the other end of the link cable (Pokemon trades)
+    gb_link_t link;
 } ccgb_t;
 
 // Start emulation. ROM image and cart RAM buffers belong to the caller;

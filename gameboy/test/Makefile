@@ -12,7 +12,7 @@ BUILD   = build
 CFLAGS  += -O2 -g -Wall -Wextra -I$(CORE) -I. $(shell pkg-config --cflags zlib)
 LDLIBS  += $(shell pkg-config --libs zlib)
 
-SRCS    = gbtest.c hal_test.c $(CORE)/gb_core.c $(CORE)/gb_video.c $(CORE)/gb_oled.c
+SRCS    = gbtest.c hal_test.c $(CORE)/gb_core.c $(CORE)/gb_video.c $(CORE)/gb_oled.c $(CORE)/gb_link.c
 HDRS    = $(wildcard $(CORE)/*.h) hal_test.h
 
 all: $(BUILD)/gbtest

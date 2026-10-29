@@ -121,9 +121,16 @@ static void serial_tx(struct gb_s *gb, const uint8_t tx)
 
 static enum gb_serial_rx_ret_e serial_rx(struct gb_s *gb, uint8_t *rx)
 {
-    (void)gb;
-    *rx = 0xff;
-    return GB_SERIAL_RX_NO_CONNECTION;
+    ccgb_t *c = gb->direct.priv;
+
+    // the other end never clocks the link; it answers when the game does
+    if(c->link.state == GB_LINK_OFF || !(gb->hram_io[IO_SC] & SERIAL_SC_CLOCK_SRC)) {
+        *rx = 0xff;
+        return GB_SERIAL_RX_NO_CONNECTION;
+    }
+
+    *rx = gb_link_exchange(&c->link, gb->hram_io[IO_SB]);
+    return GB_SERIAL_RX_SUCCESS;
 }
 
 // Is a frame buffer line different from what the LCD shows?
