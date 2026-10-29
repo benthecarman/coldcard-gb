@@ -93,7 +93,7 @@ uint8_t *gbpy_hram(ccgb_t *c) { return c->gb.hram_io; }
 uint8_t *gbpy_cart_ram(ccgb_t *c) { return c->cart_ram; }
 uint32_t gbpy_cart_ram_size(ccgb_t *c) { return c->cart_ram_size; }
 
-void gbpy_reset(ccgb_t *c) { gb_reset(&c->gb); }
+void gbpy_reset(ccgb_t *c) { ccgb_reset(c); }
 
 // Last frame drawn, one byte per pixel: shade 0 (white) .. 3
 void gbpy_frame(ccgb_t *c, uint8_t *out)

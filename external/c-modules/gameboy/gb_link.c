@@ -203,6 +203,8 @@ gb_link_setup(gb_link_t *l, const uint8_t name[GB_LINK_NAME],
     void
 gb_link_off(gb_link_t *l)
 {
+    // forget the trade too: what's next is a new one
+    memset(l, 0, sizeof(*l));
     l->state = GB_LINK_OFF;
 }
 

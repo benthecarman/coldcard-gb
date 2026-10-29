@@ -233,6 +233,16 @@ ccgb_saved(ccgb_t *c)
 }
 
     void
+ccgb_reset(ccgb_t *c)
+{
+    gb_reset(&c->gb);
+    c->cur_bank = NO_BANK;
+    c->cur_mem = NULL;
+    c->error = 0;
+    c->full_redraw = true;
+}
+
+    void
 ccgb_set_keymap(ccgb_t *c, const uint8_t map[GB_KEYMAP_BYTES])
 {
     memcpy(&c->keymap, map, GB_KEYMAP_BYTES);

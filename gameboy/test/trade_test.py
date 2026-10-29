@@ -94,13 +94,13 @@ class Player:
     def status(self):
         return self.gb.link_status()
 
-    def wait(self, cond, what, frames=3000, press=None):
+    def wait(self, cond, what, frames=3000, press=None, after=40):
         # run (pressing a button now and then) until cond() holds
         for _ in range(frames // 60):
             if cond():
                 return
             if press:
-                self.press(press)
+                self.press(press, after=after)
             else:
                 self.run(60)
         self.shot('stuck')
@@ -125,6 +125,10 @@ def new_game(p):
 def name_menu(p):
     # NEW NAME / RED / ASH / JACK: a 4-item menu, at the top left
     return p.peek(wMaxMenuItem)[0] == 3 and p.peek(wTopMenuItemY, 2) == b'\x02\x01'
+
+def main_menu(p):
+    # CONTINUE / NEW GAME / OPTION
+    return p.peek(wMaxMenuItem)[0] == 2 and p.peek(wTopMenuItemY, 2) == b'\x02\x01'
 
 def walk(p, direction, until, what):
     # step in a direction until until() holds; NPCs may be in the way
@@ -286,6 +290,22 @@ def main():
     red.wait(lambda: red.status()['state'] == 'ready', 'the room after CANCEL')
     red.run(200)
     red.shot('left-table')
+
+    # the way out is off and on again: CONTINUE is at the Pokemon Center
+    red.gb.reset()
+    red.gb.link_off()
+    if red.status() != dict(state='off', traded=False, refused=0, party_ok=False):
+        fail('RED: unplugging kept the old trade: %r' % red.status())
+    red.run(1500)
+    red.wait(lambda: main_menu(red), 'the main menu', press='START', after=120)
+    red.press('A', 'A', after=120)          # CONTINUE, and past the save info
+    red.run(300)
+    red.shot('continue')
+    if red.peek(wCurMap)[0] != VIRIDIAN_POKECENTER:
+        fail('RED: not at the Pokemon Center after the reset')
+    if MACHAMP not in [m[0] for m in party(red)[1]]:
+        fail('RED: Machamp is gone after the reset')
+    print('RED reset: back at the Pokemon Center with the Machamp')
 
     print('TRADE TEST PASSED')
 

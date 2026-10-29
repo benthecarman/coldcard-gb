@@ -135,6 +135,9 @@ void ccgb_set_video(ccgb_t *c, int mode, const uint32_t rgb[4], uint32_t border)
 // Cart RAM was written out: clear the dirty flag.
 void ccgb_saved(ccgb_t *c);
 
+// Turn the Game Boy off and on again; cart RAM stays.
+void ccgb_reset(ccgb_t *c);
+
 // Run until something needs the caller (see GB_RUN_*), or max_frames
 // have run (0 = no limit). Set redraw if something else used the LCD.
 int ccgb_run(ccgb_t *c, uint32_t max_frames, bool redraw);

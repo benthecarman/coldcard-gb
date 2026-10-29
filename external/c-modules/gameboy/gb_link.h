@@ -81,7 +81,7 @@ typedef struct {
 void gb_link_setup(gb_link_t *l, const uint8_t name[GB_LINK_NAME],
                    const gb_link_mon_t *theirs, const gb_link_mon_t *mine);
 
-// Unplug.
+// Unplug, and forget the trade.
 void gb_link_off(gb_link_t *l);
 
 // One byte each way: the game is clocking the transfer and sends tx;
