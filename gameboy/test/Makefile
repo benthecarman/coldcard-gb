@@ -4,6 +4,9 @@
 #   make test       fetch test ROMs, run cpu_instrs, instr_timing, a save
 #                   state round trip, dmg-acid2, key ghost checks, OLED
 #                   renderer checks
+#   make trade ROM=red.gb
+#                   two games of Pokemon Red (USA, Europe) trade by QR
+#                   code; bring your own ROM
 #
 CORE    = ../../external/c-modules/gameboy
 ROMS    = ../roms
@@ -42,7 +45,10 @@ test: $(BUILD)/gbtest roms
 	python3 -I compare_png.py $(BUILD)/acid2-1x.png $(ROMS)/dmg-acid2-reference.png 80 48
 	@echo "ALL TESTS PASSED"
 
+trade: $(BUILD)/libgbpy.so
+	python3 -I trade_test.py $(ROM)
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all roms test clean
+.PHONY: all roms test trade clean
