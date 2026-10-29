@@ -15,6 +15,9 @@
 // Save states: state_header() + state_view() + cart_ram() written out, and
 // state_load() to restore.
 //
+// Pokemon trades: link_trade(name, theirs, mine) plugs in a partner for
+// the Cable Club (gb_link.h); link_status() says how it went.
+//
 #include <string.h>
 
 #include "py/obj.h"
@@ -384,6 +387,74 @@ STATIC mp_obj_t gb_error_info(mp_obj_t self_in)
 }
 STATIC MP_DEFINE_CONST_FUN_OBJ_1(gb_error_info_obj, gb_error_info);
 
+// reset(): turn the Game Boy off and on; cart RAM stays
+STATIC mp_obj_t gb_reset_game(mp_obj_t self_in)
+{
+    gb_obj_t *self = get_started(self_in);
+
+    ccgb_reset(self->core);
+
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(gb_reset_obj, gb_reset_game);
+
+// wram() -> read-only memoryview of work RAM (0xC000..0xDFFF)
+STATIC mp_obj_t gb_wram(mp_obj_t self_in)
+{
+    gb_obj_t *self = get_started(self_in);
+
+    return mp_obj_new_memoryview('B', WRAM_SIZE, self->core->gb.wram);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(gb_wram_obj, gb_wram);
+
+// link_trade(name, theirs, mine): plug in a Pokemon trade partner (see
+// gb_link.h) called name, offering theirs for mine; each Pokemon is
+// party struct + OT name + nickname. link_trade(None) unplugs it.
+STATIC mp_obj_t gb_link_trade(size_t n_args, const mp_obj_t *args)
+{
+    gb_obj_t *self = get_started(args[0]);
+    gb_link_t *link = &self->core->link;
+
+    if(args[1] == mp_const_none) {
+        gb_link_off(link);
+        return mp_const_none;
+    }
+    if(n_args != 4) {
+        mp_raise_TypeError(MP_ERROR_TEXT("name, theirs, mine"));
+    }
+
+    mp_buffer_info_t name, theirs, mine;
+    mp_get_buffer_raise(args[1], &name, MP_BUFFER_READ);
+    mp_get_buffer_raise(args[2], &theirs, MP_BUFFER_READ);
+    mp_get_buffer_raise(args[3], &mine, MP_BUFFER_READ);
+    if(name.len != GB_LINK_NAME || theirs.len != sizeof(gb_link_mon_t)
+            || mine.len != sizeof(gb_link_mon_t)) {
+        mp_raise_ValueError(MP_ERROR_TEXT("trade data length"));
+    }
+
+    gb_link_setup(link, name.buf, theirs.buf, mine.buf);
+
+    return mp_const_none;
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_VAR_BETWEEN(gb_link_trade_obj, 2, 4, gb_link_trade);
+
+// link_status() -> (state, traded, refused): LINK_* state, whether the
+// trade happened, and how many times the wrong Pokemon was offered
+STATIC mp_obj_t gb_link_status(mp_obj_t self_in)
+{
+    gb_obj_t *self = get_started(self_in);
+    gb_link_t *link = &self->core->link;
+
+    mp_obj_t tup[3] = {
+        MP_OBJ_NEW_SMALL_INT(link->state),
+        mp_obj_new_bool(link->traded),
+        MP_OBJ_NEW_SMALL_INT(link->refused),
+    };
+
+    return mp_obj_new_tuple(3, tup);
+}
+STATIC MP_DEFINE_CONST_FUN_OBJ_1(gb_link_status_obj, gb_link_status);
+
 // close(): free everything; the object can't be used again
 STATIC mp_obj_t gb_close(mp_obj_t self_in)
 {
@@ -415,6 +486,10 @@ STATIC const mp_rom_map_elem_t gb_locals_dict_table[] = {
     { MP_ROM_QSTR(MP_QSTR_state_view), MP_ROM_PTR(&gb_state_view_obj) },
     { MP_ROM_QSTR(MP_QSTR_state_load), MP_ROM_PTR(&gb_state_load_obj) },
     { MP_ROM_QSTR(MP_QSTR_error), MP_ROM_PTR(&gb_error_info_obj) },
+    { MP_ROM_QSTR(MP_QSTR_reset), MP_ROM_PTR(&gb_reset_obj) },
+    { MP_ROM_QSTR(MP_QSTR_wram), MP_ROM_PTR(&gb_wram_obj) },
+    { MP_ROM_QSTR(MP_QSTR_link_trade), MP_ROM_PTR(&gb_link_trade_obj) },
+    { MP_ROM_QSTR(MP_QSTR_link_status), MP_ROM_PTR(&gb_link_status_obj) },
     { MP_ROM_QSTR(MP_QSTR_close), MP_ROM_PTR(&gb_close_obj) },
 };
 STATIC MP_DEFINE_CONST_DICT(gb_locals_dict, gb_locals_dict_table);
@@ -458,6 +533,13 @@ STATIC const mp_rom_map_elem_t mp_module_gameboy_globals_table[] = {
     { MP_ROM_QSTR(MP_QSTR_VIDEO_2X_CROP), MP_ROM_INT(VIDEO_2X_CROP) },
     { MP_ROM_QSTR(MP_QSTR_VIDEO_OLED_FILL), MP_ROM_INT(VIDEO_OLED_FILL) },
     { MP_ROM_QSTR(MP_QSTR_VIDEO_OLED_FIT), MP_ROM_INT(VIDEO_OLED_FIT) },
+
+    { MP_ROM_QSTR(MP_QSTR_LINK_OFF), MP_ROM_INT(GB_LINK_OFF) },
+    { MP_ROM_QSTR(MP_QSTR_LINK_WAITING), MP_ROM_INT(GB_LINK_WAITING) },
+    { MP_ROM_QSTR(MP_QSTR_LINK_READY), MP_ROM_INT(GB_LINK_READY) },
+    { MP_ROM_QSTR(MP_QSTR_LINK_BLOCKS), MP_ROM_INT(GB_LINK_BLOCKS) },
+    { MP_ROM_QSTR(MP_QSTR_LINK_SELECT), MP_ROM_INT(GB_LINK_SELECT) },
+    { MP_ROM_QSTR(MP_QSTR_LINK_CONFIRM), MP_ROM_INT(GB_LINK_CONFIRM) },
 
     { MP_ROM_QSTR(MP_QSTR_NO_KEY), MP_ROM_INT(GB_NO_KEY) },
     { MP_ROM_QSTR(MP_QSTR_KEYMAP_BYTES), MP_ROM_INT(GB_KEYMAP_BYTES) },
