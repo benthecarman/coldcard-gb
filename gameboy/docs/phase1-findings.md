@@ -73,7 +73,7 @@ Tearing **(verify on hardware)**: the panel is native portrait and landscape com
 
 **Blockers: none.** Decisions from review:
 
-1. **Tooling:** packages go into Ben's NixOS config (`~/projects/nixos-config-dev-server/modules/development.nix`), not a project flake. Ben runs the switch.
+1. **Tooling:** packages go into the dev server's Nix config, not a project flake. Ben runs the switch.
 2. **Repo layout:** this repo *is* the firmware fork. Upstream Coldcard is the `upstream` remote (push disabled), everything is on `master`, and tooling and docs live under `gameboy/`.
 
 Risks (not blockers):
