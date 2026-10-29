@@ -17,6 +17,13 @@ HDRS    = $(wildcard $(CORE)/*.h) hal_test.h
 
 all: $(BUILD)/gbtest
 
+# the core as a shared library for Python test scripts (gbpy.py)
+PYSRCS  = gbpy.c hal_test.c $(CORE)/gb_core.c $(CORE)/gb_video.c $(CORE)/gb_oled.c $(CORE)/gb_link.c
+
+$(BUILD)/libgbpy.so: $(PYSRCS) $(HDRS)
+	@mkdir -p $(BUILD)
+	$(CC) $(CFLAGS) -shared -fPIC -o $@ $(PYSRCS)
+
 $(BUILD)/gbtest: $(SRCS) $(HDRS)
 	@mkdir -p $(BUILD)
 	$(CC) $(CFLAGS) -o $@ $(SRCS) $(LDLIBS)

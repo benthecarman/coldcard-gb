@@ -14,13 +14,18 @@ const bool hal_lcd_big_endian = false;
 
 uint16_t test_screen[HAL_LCD_H][HAL_LCD_W];
 uint64_t test_keys;
+bool test_keys_at_start;
 int test_lcd_writes;
 
 static int win_x, win_y, win_w, win_h, win_pos;
 static uint64_t now_us;
 static uint8_t *rom_mem;
 
-void hal_lcd_begin(void) { }
+// ccgb_run() ignores keys held when it starts, until they are let go; so
+// scripts can hold keys from the first frame, it sees none held then
+static bool run_starting;
+
+void hal_lcd_begin(void) { run_starting = test_keys_at_start; }
 void hal_lcd_end(void) { }
 void hal_lcd_sync(void) { }
 
@@ -70,6 +75,10 @@ void hal_oled_write(const uint8_t *buf)
 
 uint64_t hal_keys(void)
 {
+    if(run_starting) {
+        run_starting = false;
+        return 0;
+    }
     return test_keys;
 }
 
